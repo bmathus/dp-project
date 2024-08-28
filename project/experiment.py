@@ -1,30 +1,70 @@
 from pathlib import Path
-from project.model import MultiLayerPerceptron
+from project.models.model import MultiLayerPerceptron
 from project.datamodule import DataModule
 from project.trainer import Trainer
 from project.logging import Log
-import yaml
+from argparse import Namespace
 import torch
+import yaml
+import neptune
+import uuid
 
 BASE_PATH = Path(".data/experiments")
 
 class Experiment:
     def __init__(self,cfg):
         self.cfg = cfg
+        
+        resuming_run = False
+        if self.cfg.ver != "auto": 
+            resuming_run = True
 
-        #Create experiment path and save config
-        self.experiment_path = BASE_PATH / cfg.name / cfg.ver
-        print(f" > Created experiment : {cfg.name}/{cfg.ver}")
-
-        self.experiment_path.mkdir(parents=True, exist_ok=True)
-        self._save_config(cfg, self.experiment_path)
+        # Resuming experiment
+        if resuming_run: 
+            self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
+            self._load_experiment_config()
+            print(f" > Resuming experiment : {self.cfg.name}/{self.cfg.ver}")
+        # Creating new experiment
+        else:
+            self.cfg.ver = "run-"+str(uuid.uuid4())[:8]
+            self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
+            self.experiment_path.mkdir(parents=True, exist_ok=True)
+            self._save_config(self.cfg, self.experiment_path)
+            print(f" > Created experiment : {self.cfg.name}/{self.cfg.ver}")
 
         # Create model & datamodule
-        self.model = self._create_model(cfg)
-        self.datamodule = DataModule()
+        self.model = self._create_model(self.cfg)
+        self.datamodule: DataModule = DataModule()
 
         #Create trainer
-        self.trainer = Trainer(cfg,self.model)
+        self.trainer = Trainer(self.cfg,self.model)
+
+        # Load model weight/optimizer
+        if resuming_run:
+            self._load_checkpoint()
+            
+
+    def _load_checkpoint(self):
+        checkpoint_path = self.experiment_path / "checkpoints" / "latest.pt"
+        print(f" > Loading checkpoint: {checkpoint_path.as_posix()}")
+        checkpoint = torch.load(
+            checkpoint_path.as_posix(),
+            map_location=torch.device("mps")
+        )
+        self.model.load_state_dict(checkpoint["model"])
+        self.trainer.opt.load_state_dict(checkpoint["optimizer"])
+        self.trainer.start_epoch = checkpoint["epoch"] + 1
+
+    def _load_experiment_config(self):
+        config_filepath = self.experiment_path / "config.yaml"
+        with config_filepath.open() as fp:
+            config_dict = yaml.safe_load(fp)
+            config_str = yaml.dump(config_dict)
+            print(" > Loaded configuration: ")
+            print("-------------------------")
+            print(config_str.strip())
+            print("----------------------------")
+            self.cfg = Namespace(**config_dict)
 
     def _create_model(self, cfg):
         # Create model
@@ -36,24 +76,26 @@ class Experiment:
         return model
 
     def train(self):
+        # Initialize run
+        self.run = neptune.init_run(
+            project="dp-workspace/dp-segmentation",
+            name=self.cfg.name,
+            custom_run_id=self.cfg.ver,
+            tags=["debug"],
+            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MGM2ZjZlNS0wOGVlLTRiN2UtYjYzNC1mNDJiZmU4MzlhYzIifQ==",
+        )
+        self.run["parameters"] = self.cfg
+
+        #Start training
         self.trainer.setup(
             datamodule=self.datamodule,
-            log=Log(self)
+            log=Log(self.run)
         )
-        self.trainer.fit()
+        self.trainer.fit(self.experiment_path)
 
-    def save_checkpoint(self, file_name):
-        checkpoint = {
-            "model": self.model.state_dict(),
-            "optimizer": self.trainer.opt.state_dict()
-        }
-
-        #Create checkpoint foelder if does not exist
-        checkpoint_path = self.experiment_path / "checkpoints" / file_name
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-        print(f"Saving checkpoint: {checkpoint_path.as_posix()}")
-        torch.save(checkpoint, checkpoint_path.as_posix())
+        #End run
+        self.run.stop()
+        
     
     def _save_config(self, cfg, exp_path):
         config_yaml = yaml.dump(vars(cfg))

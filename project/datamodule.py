@@ -49,3 +49,7 @@ class DataModule:
         shuffle=False,                # Do not use random ordering for validation
         num_workers=cfg.num_workers   # Parallel processing of input samples
     )
+
+class CityDataModule:
+  def __init__(self):
+    pass
