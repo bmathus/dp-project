@@ -36,7 +36,7 @@ class UNet(nn.Module):
         x = self.decoder_block2(x,out2)
         x = self.decoder_block1(x,out1)
 
-        return x
+        return self.conv_1x1(x)
     
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
