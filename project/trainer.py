@@ -5,6 +5,7 @@ from project.logging import Statistics
 from project.logging import Logger
 from project.datamodule import DataModule
 from pathlib import Path
+from project.models.model import MultiLayerPerceptron
 
 
 def decide_device():
@@ -14,29 +15,41 @@ def decide_device():
         return "mps"
     return "cpu"
 
+def create_model(cfg):
+    # Create model
+    model = MultiLayerPerceptron(
+        nin = 28*28,                # Image size is 28x28
+        nhidden = cfg.num_hidden,   # Larger hidden layer
+        nout=10                     # 10 possible classes
+    )
+    return model
+
+
 class Trainer:
-    def __init__(self, cfg, model):
-        # Select GPU device
+    def __init__(self, cfg, experiment_path ,resuming_run: bool):
         self.device = torch.device(decide_device())
         print("Setting up device:",self.device)
-
-        # Setup model and config
         self.cfg = cfg
         self.start_epoch = 0
-        self.model: nn.Module = model.to(self.device)  # Move parameters to GPU
 
-        # Create optimizer
+        # Create model & datamodule
+        self.model: nn.Module = create_model(self.cfg)
+        self.model: nn.Module = self.model.to(self.device)  # Move parameters to GPU
+        self.datamodule: DataModule = DataModule()
+
+        # Create optimizer and loss
         self.opt = torch.optim.SGD(
             params=self.model.parameters(),
             lr=cfg.learning_rate
         )
-
-        # Create loss function
         self.loss_fun = nn.CrossEntropyLoss()
 
-    def setup(self, datamodule: DataModule, log: Logger):
+        # Load model weight/optimizer
+        if resuming_run:
+            self._load_checkpoint(experiment_path)
+
+    def setup(self, log: Logger):
         self.log = log
-        self.datamodule = datamodule
         self.datamodule.setup(self.cfg)
 
 
@@ -127,3 +140,14 @@ class Trainer:
 
         print(f"Saving checkpoint: {checkpoint_path.as_posix()}")
         torch.save(checkpoint, checkpoint_path.as_posix())
+    
+    def _load_checkpoint(self,experiment_path):
+        checkpoint_path = experiment_path / "checkpoints" / "latest.pt"
+        print(f" > Loading checkpoint: {checkpoint_path.as_posix()}")
+        checkpoint = torch.load(
+            checkpoint_path.as_posix(),
+            map_location=torch.device("mps")
+        )
+        self.model.load_state_dict(checkpoint["model"])
+        self.opt.load_state_dict(checkpoint["optimizer"])
+        self.start_epoch = checkpoint["epoch"] + 1
