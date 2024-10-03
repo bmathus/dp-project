@@ -2,7 +2,7 @@ from pathlib import Path
 from project.models.model import MultiLayerPerceptron
 from project.datamodule import DataModule
 from project.trainer import Trainer
-from project.logging import Log
+from project.logging import Logger
 from argparse import Namespace
 import torch
 import yaml
@@ -89,7 +89,7 @@ class Experiment:
         #Start training
         self.trainer.setup(
             datamodule=self.datamodule,
-            log=Log(self.run)
+            log=Logger(self.run)
         )
         self.trainer.fit(self.experiment_path)
 

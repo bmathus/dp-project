@@ -65,7 +65,7 @@ class Encoder(nn.Module):
         x2 = self.down2(x1)
         x3 = self.down3(x2)
         x4 = self.down4(x3)
-        return [x0, x1, x2, x3, x4]
+        return x0, x1, x2, x3, x4
 
 
 # Decoder modules
@@ -141,12 +141,7 @@ class Decoder_URPC(nn.Module):
         self.out_conv_dp1 = nn.Conv2d(self.ft_chns[1], self.n_class,kernel_size=3, padding=1)
         self.feature_noise = FeatureNoise()
 
-    def forward(self, feature, shape):
-        x0 = feature[0]
-        x1 = feature[1]
-        x2 = feature[2]
-        x3 = feature[3]
-        x4 = feature[4]
+    def forward(self, x0, x1, x2, x3, x4, shape):
         x = self.up1(x4, x3)
         if self.training:
             dp3_out_seg = self.out_conv_dp3(Dropout(x, p=0.5))
@@ -192,8 +187,8 @@ class UNet_URPC(nn.Module):
     def forward(self, x):
         shape = x.shape[2:]
 
-        feature = self.encoder(x)
+        x0, x1, x2, x3, x4 = self.encoder(x)
 
-        dp1_out_seg, dp2_out_seg, dp3_out_seg, dp4_out_seg = self.decoder(feature, shape)
+        dp1_out_seg, dp2_out_seg, dp3_out_seg, dp4_out_seg = self.decoder(x0, x1, x2, x3, x4, shape)
         
         return dp1_out_seg, dp2_out_seg, dp3_out_seg, dp4_out_seg

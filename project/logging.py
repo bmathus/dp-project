@@ -1,5 +1,5 @@
 from neptune import Run
-class Log:
+class Logger:
     def __init__(self, run: Run):
         self.run = run
   

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from project.logging import Statistics
-from project.logging import Log
+from project.logging import Logger
 from project.datamodule import DataModule
 from pathlib import Path
 
@@ -34,7 +34,7 @@ class Trainer:
         # Create loss function
         self.loss_fun = nn.CrossEntropyLoss()
 
-    def setup(self, datamodule: DataModule, log: Log):
+    def setup(self, datamodule: DataModule, log: Logger):
         self.log = log
         self.datamodule = datamodule
         self.datamodule.setup(self.cfg)
