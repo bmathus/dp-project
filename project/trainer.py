@@ -1,48 +1,50 @@
 import torch
 import torch.nn as nn
+import numpy as np
+import random
 from tqdm import tqdm
 from project.logging import Statistics
 from project.logging import Logger
 from project.datamodule import DataModule
 from pathlib import Path
 from project.models.model import MultiLayerPerceptron
-
-
-def decide_device():
-    if (torch.cuda.is_available()): 
-        return "cuda"
-    if (torch.backends.mps.is_available()):
-        return "mps"
-    return "cpu"
-
-def create_model(cfg):
-    # Create model
-    model = MultiLayerPerceptron(
-        nin = 28*28,                # Image size is 28x28
-        nhidden = cfg.num_hidden,   # Larger hidden layer
-        nout=10                     # 10 possible classes
-    )
-    return model
-
+import torch.backends.cudnn as cudnn
 
 class Trainer:
     def __init__(self, cfg, experiment_path ,resuming_run: bool):
-        self.device = torch.device(decide_device())
-        print("Setting up device:",self.device)
+        #Setup torch seed and device
         self.cfg = cfg
         self.start_epoch = 0
 
+        # if not cfg.deterministic:
+        #     cudnn.benchmark = True
+        #     cudnn.deterministic = False
+        # else:
+        #     cudnn.benchmark = False
+        #     cudnn.deterministic = True
+
+        random.seed(cfg.seed)
+        np.random.seed(cfg.seed)
+        torch.manual_seed(cfg.seed)
+        torch.cuda.manual_seed(cfg.seed)
+        torch.mps.manual_seed(cfg.seed)
+
+        self.device = torch.device(decide_device()) # toto urpc nerobí
+        print("Setting up device:",self.device)
+
         # Create model & datamodule
         self.model: nn.Module = create_model(self.cfg)
-        self.model: nn.Module = self.model.to(self.device)  # Move parameters to GPU
-        self.datamodule: DataModule = DataModule()
+        self.model: nn.Module = self.model.to(self.device)  # ani toto nerobí URPC
 
-        # Create optimizer and loss
-        self.opt = torch.optim.SGD(
-            params=self.model.parameters(),
-            lr=cfg.learning_rate
-        )
-        self.loss_fun = nn.CrossEntropyLoss()
+
+        # self.datamodule: DataModule = DataModule()
+
+        # # Create optimizer and loss
+        # self.opt = torch.optim.SGD(
+        #     params=self.model.parameters(),
+        #     lr=cfg.learning_rate
+        # )
+        # self.loss_fun = nn.CrossEntropyLoss()
 
         # Load model weight/optimizer
         if resuming_run:
@@ -151,3 +153,19 @@ class Trainer:
         self.model.load_state_dict(checkpoint["model"])
         self.opt.load_state_dict(checkpoint["optimizer"])
         self.start_epoch = checkpoint["epoch"] + 1
+
+def decide_device():
+    if (torch.cuda.is_available()): 
+        return "cuda"
+    if (torch.backends.mps.is_available()):
+        return "mps"
+    return "cpu"
+
+def create_model(cfg):
+    # Create model
+    model = MultiLayerPerceptron(
+        nin = 28*28,                # Image size is 28x28
+        nhidden = cfg.num_hidden,   # Larger hidden layer
+        nout=10                     # 10 possible classes
+    )
+    return model
