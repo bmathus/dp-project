@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+import random
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
@@ -39,3 +40,8 @@ class DiceLoss(nn.Module):
             loss += dice * weight[i]
         return loss / self.n_classes
     
+
+
+
+def worker_init_fn(worker_id):
+    random.seed(1337 + worker_id)

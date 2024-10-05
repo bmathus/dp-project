@@ -5,7 +5,9 @@ import random
 from tqdm import tqdm
 from project.logging import Statistics
 from project.logging import Logger
-from project.datamodule import DataModule
+from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
+from torch.utils.data import DataLoader
+from torchvision import transforms
 from pathlib import Path
 from project.models.model import MultiLayerPerceptron
 import torch.backends.cudnn as cudnn
@@ -15,6 +17,7 @@ class Trainer:
         #Setup torch seed and device
         self.cfg = cfg
         self.start_epoch = 0
+        self.resuming_run = resuming_run
 
         # if not cfg.deterministic:
         #     cudnn.benchmark = True
@@ -32,23 +35,9 @@ class Trainer:
         self.device = torch.device(decide_device()) # toto urpc nerobí
         print("Setting up device:",self.device)
 
-        # Create model & datamodule
+        # Create model
         self.model: nn.Module = create_model(self.cfg)
         self.model: nn.Module = self.model.to(self.device)  # ani toto nerobí URPC
-
-
-        # self.datamodule: DataModule = DataModule()
-
-        # # Create optimizer and loss
-        # self.opt = torch.optim.SGD(
-        #     params=self.model.parameters(),
-        #     lr=cfg.learning_rate
-        # )
-        # self.loss_fun = nn.CrossEntropyLoss()
-
-        # Load model weight/optimizer
-        if resuming_run:
-            self._load_checkpoint(experiment_path)
 
     def setup(self, log: Logger):
         self.log = log
@@ -56,6 +45,32 @@ class Trainer:
 
 
     def fit(self, experiment_path: Path):
+        db_train = BaseDataSets(base_dir="./project/ACDC", split="train", num=None, transform=transforms.Compose([
+            RandomGenerator([256, 256])
+        ]))
+
+        db_val = BaseDataSets(base_dir="./project/ACDC", split="val")
+
+        total_slices = len(db_train)
+        labeled_slice = patients_to_slices("ACDC", self.cfg.labeled_num)
+        labeled_idxs = list(range(0, labeled_slice))
+        unlabeled_idxs = list(range(labeled_slice, total_slices))
+
+        batch_sampler = TwoStreamBatchSampler(labeled_idxs, unlabeled_idxs, self.cfg.batch_size, self.cfg.batch_size-self.cfg.labeled_bs)
+
+        def worker_init_fn(worker_id):
+            random.seed(self.cfg.seed + worker_id)
+
+        trainloader = DataLoader(db_train, batch_sampler=batch_sampler,num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
+
+        self.model.train()
+        valloader = DataLoader(db_val, batch_size=1, shuffle=False,num_workers=1)
+
+
+
+        # if self.resuming_run:
+        #     self._load_checkpoint(experiment_path)
+
         # Implement training loop
         self.log.on_training_start()
         for epoch in range(self.start_epoch,self.cfg.max_epochs):
@@ -169,3 +184,4 @@ def create_model(cfg):
         nout=10                     # 10 possible classes
     )
     return model
+

@@ -1,69 +1,155 @@
+import h5py
+import random
 import torch
-import torch.nn.functional as tnf
-import torchvision
-import torchvision.transforms.functional as tvf
-from torchvision.io import read_image
+import itertools
+import numpy as np
+from scipy import ndimage
+from scipy.ndimage.interpolation import zoom
 from torch.utils.data import Dataset
-from glob import glob
-
-def image_transform(x):
-    y = tvf.pil_to_tensor(x)  # Converts image into tensor (still uint8)
-    y = (y / 255.0).float()   # Normalize into <0;1> range and float
-    return y
-
-def label_transform(x):
-    y = torch.LongTensor([x])[0]                # Make tensor from integer
-    y = tnf.one_hot(y, num_classes=10).float()  # Make one-hot vector from tensor
-    return y
+from torch.utils.data.sampler import Sampler
 
 
-class DataModule:
-    def __init__(self):
+# from dataloaders.dataset import BaseDataSets, RandomGenerator, TwoStreamBatchSampler
 
-        self.dataset_train = torchvision.datasets.MNIST(
-            root=".data/dataset/MNIST/train",
-            train=True,                 # This is training set
-            download=True,
-            transform=image_transform,
-            target_transform=label_transform
-        )
+class BaseDataSets(Dataset):
+    def __init__(self,base_dir: str,split="train",num=None,transform=None,ops_weak=None,ops_strong=None):
+        self._base_dir = base_dir
+        self.sample_list = []
+        self.split = split
+        self.transform = transform
+        self.ops_weak = ops_weak
+        self.ops_strong = ops_strong
 
-        self.dataset_val = torchvision.datasets.MNIST(
-            root=".data/dataset/MNIST/val",
-            train=False,                # This is validation set
-            download=True,
-            transform=image_transform,
-            target_transform=label_transform
-        )
+        assert bool(ops_weak) == bool(
+            ops_strong
+        ), "For using CTAugment learned policies, provide both weak and strong batch augmentation policy"
 
-    def setup(self, cfg):
-        self.dataloader_train = torch.utils.data.dataloader.DataLoader(
-            self.dataset_train,
-            batch_size=cfg.batch_size,    # Batch size hyper-parameter
-            shuffle=True,                 # Iterate over samples in random order
-            num_workers=cfg.num_workers   # Parallel processing of input samples
-        )
+        if self.split == "train":
+            with open(self._base_dir + "/train_slices.list", "r") as f1:
+                self.sample_list = f1.readlines()
+            self.sample_list = [item.replace("\n", "") for item in self.sample_list]
 
-        self.dataloader_val = torch.utils.data.dataloader.DataLoader(
-            self.dataset_val,
-            batch_size=cfg.batch_size,    # Batch size hyper-parameter
-            shuffle=False,                # Do not use random ordering for validation
-            num_workers=cfg.num_workers   # Parallel processing of input samples
-        )
+        elif self.split == "val":
+            with open(self._base_dir + "/val.list", "r") as f:
+                self.sample_list = f.readlines()
+            self.sample_list = [item.replace("\n", "") for item in self.sample_list]
 
-class DriveDataset(Dataset):
-    def __init__(self, images_path, masks_path):
-        self.images_path = sorted(glob(images_path))
-        self.masks_path = sorted(glob(masks_path))
-        self.n_samples = len(images_path)
+        if num is not None and self.split == "train":
+            self.sample_list = self.sample_list[:num]
+        print("total {} samples".format(len(self.sample_list)))
 
-    def __getitem__(self, index):
-        image = read_image(self.images_path[index]) / 255
-        mask = read_image(self.masks_path[index]) / 255
-
-        return image, mask
-    
     def __len__(self):
-        return self.n_samples
+        return len(self.sample_list)
+
+    def __getitem__(self, idx):
+        case = self.sample_list[idx]
+        if self.split == "train":
+            h5f = h5py.File(self._base_dir + "/data/slices/{}.h5".format(case), "r")
+        else:
+            h5f = h5py.File(self._base_dir + "/data/{}.h5".format(case), "r")
+        image = h5f["image"][:]
+        label = h5f["label"][:]
+        sample = {"image": image, "label": label}
+        if self.split == "train":
+            if None not in (self.ops_weak, self.ops_strong):
+                sample = self.transform(sample, self.ops_weak, self.ops_strong)
+            else:
+                sample = self.transform(sample)
+        sample["idx"] = idx
+        return sample
+
+def random_rot_flip(image, label=None):
+    k = np.random.randint(0, 4)
+    image = np.rot90(image, k)
+    axis = np.random.randint(0, 2)
+    image = np.flip(image, axis=axis).copy()
+    if label is not None:
+        label = np.rot90(label, k)
+        label = np.flip(label, axis=axis).copy()
+        return image, label
+    else:
+        return image
+
+def random_rotate(image, label):
+    angle = np.random.randint(-20, 20)
+    image = ndimage.rotate(image, angle, order=0, reshape=False)
+    label = ndimage.rotate(label, angle, order=0, reshape=False)
+    return image, label
+
+class RandomGenerator(object):
+    def __init__(self, output_size):
+        self.output_size = output_size
+
+    def __call__(self, sample):
+        image, label = sample["image"], sample["label"]
+        # ind = random.randrange(0, img.shape[0])
+        # image = img[ind, ...]
+        # label = lab[ind, ...]
+        if random.random() > 0.5:
+            image, label = random_rot_flip(image, label)
+        elif random.random() > 0.5:
+            image, label = random_rotate(image, label)
+        x, y = image.shape
+        image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=0)
+        label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
+        image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
+        label = torch.from_numpy(label.astype(np.uint8))
+        sample = {"image": image, "label": label}
+        return sample
+    
+
+class TwoStreamBatchSampler(Sampler):
+    """Iterate two sets of indices
+
+    An 'epoch' is one iteration through the primary indices.
+    During the epoch, the secondary indices are iterated through
+    as many times as needed.
+    """
+
+    def __init__(self, primary_indices, secondary_indices, batch_size, secondary_batch_size):
+        self.primary_indices = primary_indices
+        self.secondary_indices = secondary_indices
+        self.secondary_batch_size = secondary_batch_size
+        self.primary_batch_size = batch_size - secondary_batch_size
+
+        assert len(self.primary_indices) >= self.primary_batch_size > 0
+        assert len(self.secondary_indices) >= self.secondary_batch_size > 0
+
+    def __iter__(self):
+        primary_iter = iterate_once(self.primary_indices)
+        secondary_iter = iterate_eternally(self.secondary_indices)
+        return (
+            primary_batch + secondary_batch
+            for (primary_batch, secondary_batch) in zip(
+                grouper(primary_iter, self.primary_batch_size),
+                grouper(secondary_iter, self.secondary_batch_size),
+            )
+        )
+
+    def __len__(self):
+        return len(self.primary_indices) // self.primary_batch_size
+
+def iterate_once(iterable):
+    return np.random.permutation(iterable)
 
 
+def iterate_eternally(indices):
+    def infinite_shuffles():
+        while True:
+            yield np.random.permutation(indices)
+
+    return itertools.chain.from_iterable(infinite_shuffles())
+
+def grouper(iterable, n):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3) --> ABC DEF"
+    args = [iter(iterable)] * n
+    return zip(*args)
+
+def patients_to_slices(dataset, patiens_num):
+    ref_dict = None
+    if "ACDC" in dataset:
+        ref_dict = {"3": 68, "7": 136,"14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
+    else:
+        print("Error")
+    return ref_dict[str(patiens_num)]
