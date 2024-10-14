@@ -25,8 +25,7 @@ GitPython==3.1.43
 h5py==3.12.1
 idna==3.7
 importlib_resources==6.4.2
-ipykernel==6.29.5
-ipython==8.26.0
+
 isoduration==20.11.0
 jedi==0.19.1
 Jinja2==3.1.4
@@ -58,7 +57,6 @@ parso==0.8.4
 pexpect==4.9.0
 pillow==10.4.0
 platformdirs==4.2.2
-prompt_toolkit==3.0.47
 psutil==6.0.0
 ptyprocess==0.7.0
 pure_eval==0.2.3
@@ -68,7 +66,6 @@ pyparsing==3.1.4
 python-dateutil==2.9.0.post0
 pytz==2024.1
 PyYAML==6.0.2
-pyzmq==26.1.1
 referencing==0.35.1
 requests==2.32.3
 requests-oauthlib==2.0.0
@@ -89,7 +86,6 @@ torch==2.4.0
 torchmetrics==1.4.1
 torchsummary==1.5.1
 torchvision==0.19.0
-tornado==6.4.1
 tqdm==4.66.5
 traitlets==5.14.3
 types-python-dateutil==2.9.0.20240316
