@@ -6,7 +6,7 @@ import yaml
 import neptune
 import uuid
 
-BASE_PATH = Path(".data/experiments")
+BASE_PATH = Path("data/experiments")
 
 class Experiment:
     def __init__(self,cfg):
@@ -48,7 +48,7 @@ class Experiment:
         self.trainer.setup(
             log=Logger(self.run)
         )
-        self.trainer.fit(self.experiment_path)
+        self.trainer.fit(self.experiment_path,self.run)
 
         #End run
         self.run.stop()
@@ -70,7 +70,7 @@ class Experiment:
 
         print(" > Training Configuration:")
         print("----------------------------")
-        print(config_yaml.strip())
+        print("|",config_yaml.strip())
         print("----------------------------")
 
         # Save configuration into YAML

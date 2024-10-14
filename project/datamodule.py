@@ -10,7 +10,6 @@ from torch.utils.data.sampler import Sampler
 
 
 # from dataloaders.dataset import BaseDataSets, RandomGenerator, TwoStreamBatchSampler
-
 class BaseDataSets(Dataset):
     def __init__(self,base_dir: str,split="train",num=None,transform=None,ops_weak=None,ops_strong=None):
         self._base_dir = base_dir
@@ -36,7 +35,6 @@ class BaseDataSets(Dataset):
 
         if num is not None and self.split == "train":
             self.sample_list = self.sample_list[:num]
-        print("total {} samples".format(len(self.sample_list)))
 
     def __len__(self):
         return len(self.sample_list)
@@ -152,4 +150,6 @@ def patients_to_slices(dataset, patiens_num):
         ref_dict = {"3": 68, "7": 136,"14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
     else:
         print("Error")
+    print(f"| Labeled samples: {(100/140) * patiens_num}%")
+ 
     return ref_dict[str(patiens_num)]
