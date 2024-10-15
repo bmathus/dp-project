@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import os
 import numpy as np
 import random
 from tqdm import tqdm
@@ -88,6 +89,7 @@ class Trainer:
         self.log.on_training_start()
         max_epoch = cfg.max_iter // len(trainloader) + 1
         iter_num = 0
+        best_performance = 0.0
         iterator = tqdm(range(max_epoch), desc="| Training:")
         for epoch_num in iterator:
             for i_batch, sampled_batch in enumerate(trainloader):
@@ -182,8 +184,10 @@ class Trainer:
                 #     run["train/images/Prediction"].append(File.as_image(ou.to("cpu")),step=iter_num)
                 #     labs = label_batch[1, ...].unsqueeze(0) * 50
                 #     run["train/images/GroundTruth"].append(File.as_image(labs.to("cpu")),step=iter_num)
-
+                
+                # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
+                    print(f" > Validating at iter: {iter_num}")
                     self.model.eval()
                     metric_list = 0.0
                     for i_batch, sampled_batch in enumerate(valloader):
@@ -200,9 +204,22 @@ class Trainer:
                     run["val/mean_dice"].append(performance,step=iter_num)
                     run["val/mean_hd95"].append(mean_hd95,step=iter_num)
 
+                    if performance > best_performance:
+                        best_performance = performance
+                        best_model_path = os.path.join(experiment_path,'best_model.pth')
+                        torch.save(self.model.state_dict(),best_model_path)
+                        print(f" > Saving best model iter:{iter_num}, dice:{round(best_performance, 4)}")
+                        run["val/best_model_dice"].append(best_performance,step=iter_num)
+                    
                     #Switch to training
                     self.model.train()
-
+                    
+                if iter_num % 3000 == 0:
+                    save_path = os.path.join(experiment_path, 'iter_' + str(iter_num) + '.pth')
+                    torch.save(self.model.state_dict(), save_path)
+                    print(f" > Saving model to:{save_path}")
+          
+                    
                 if iter_num >= cfg.max_iter:
                     break
 

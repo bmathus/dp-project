@@ -13,11 +13,11 @@ if __name__ == "__main__":
     # Experiment
     p.add_argument("--name", "-n", type=str, default="basic", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
-    p.add_argument("--data_path", "-dt", type=str, default="./data/ACDC", help="Path to dataset")
+    p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
 
     # p.add_argument("--checkpoint_freq","-cf", type=int, default=2, help="Frequency of saving model & opt checkpoints")
     p.add_argument('--seed', type=int,  default=1337, help='Random seed')
-    p.add_argument('--deterministic',"-d", type=int,  default=1,help='Whether use deterministic training')
+    p.add_argument('--deterministic',"-dt", type=int,  default=1,help='Whether use deterministic training')
 
     p.add_argument("--max_iter","-e", type=int, default=30000, help="Number of iterations")
     p.add_argument("--base_lr","-lr", type=float, default=0.01, help="Segmentation network learning rate")

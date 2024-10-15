@@ -8,30 +8,30 @@ import uuid
 
 BASE_PATH = Path("data/experiments")
 
+
 class Experiment:
-    def __init__(self,cfg):
+    def __init__(self, cfg):
         self.cfg = cfg
-        
+
         self.resuming_run = False
-        if self.cfg.ver != "": 
+        if self.cfg.ver != "":
             self.resuming_run = True
 
         # Resuming experiment
-        if self.resuming_run: 
+        if self.resuming_run:
             self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
             self._load_param_config()
             print(f" > Resuming experiment : {self.cfg.name}/{self.cfg.ver}")
         # Creating new experiment
         else:
-            self.cfg.ver = "run-"+str(uuid.uuid4())[:8]
+            self.cfg.ver = "run-" + str(uuid.uuid4())[:8]
             self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
             self.experiment_path.mkdir(parents=True, exist_ok=True)
             self._save_param_config(self.cfg, self.experiment_path)
             print(f" > Created experiment : {self.cfg.name}/{self.cfg.ver}")
 
-        #Create trainer
-        self.trainer = Trainer(self.cfg,self.experiment_path,self.resuming_run)
-
+        # Create trainer
+        self.trainer = Trainer(self.cfg, self.experiment_path, self.resuming_run)
 
     def start_experiment(self):
         # Initialize run
@@ -44,15 +44,12 @@ class Experiment:
         )
         self.run["parameters"] = self.cfg
 
-        #Start training
-        self.trainer.setup(
-            log=Logger(self.run)
-        )
-        self.trainer.fit(self.experiment_path,self.run)
+        # Start training
+        self.trainer.setup(log=Logger(self.run))
+        self.trainer.fit(self.experiment_path, self.run)
 
-        #End run
+        # End run
         self.run.stop()
-    
 
     def _load_param_config(self):
         config_filepath = self.experiment_path / "config.yaml"
@@ -64,16 +61,14 @@ class Experiment:
             print(config_str.strip())
             print("----------------------------")
             self.cfg = Namespace(**config_dict)
-    
+
     def _save_param_config(self, cfg, exp_path):
         config_yaml = yaml.dump(vars(cfg))
 
         print(" > Training Configuration:")
         print("----------------------------")
-        print("|",config_yaml.strip())
+        print("|", config_yaml.strip())
         print("----------------------------")
 
         # Save configuration into YAML
         (exp_path / "config.yaml").write_text(config_yaml)
-
-
