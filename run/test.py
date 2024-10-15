@@ -23,9 +23,10 @@ def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1
     gt[gt > 0] = 1
     dice = metric.binary.dc(pred, gt)
+    jc = metric.binary.jc(pred, gt)
     asd = metric.binary.asd(pred, gt)
     hd95 = metric.binary.hd95(pred, gt)
-    return dice, hd95, asd
+    return dice, jc, hd95, asd
 
 
 def test_single_volume(case, net, FLAGS,device):
@@ -48,10 +49,21 @@ def test_single_volume(case, net, FLAGS,device):
             out = out.cpu().detach().numpy()
             pred = zoom(out, (x / 256, y / 256), order=0)
             prediction[ind] = pred
+    
+    if np.sum(prediction == 1)==0:
+        first_metric = 0,0,0,0
+    else:
+        first_metric = calculate_metric_percase(prediction == 1, label == 1)
 
-    first_metric = calculate_metric_percase(prediction == 1, label == 1)
-    second_metric = calculate_metric_percase(prediction == 2, label == 2)
-    third_metric = calculate_metric_percase(prediction == 3, label == 3)
+    if np.sum(prediction == 2)==0:
+        second_metric = 0,0,0,0
+    else:
+        second_metric = calculate_metric_percase(prediction == 2, label == 2)
+
+    if np.sum(prediction == 3)==0:
+        third_metric = 0,0,0,0
+    else:
+        third_metric = calculate_metric_percase(prediction == 3, label == 3)
 
     # img_itk = sitk.GetImageFromArray(image.astype(np.float32))
     # img_itk.SetSpacing((1, 1, 10))
@@ -97,8 +109,7 @@ def Inference(FLAGS):
         first_total += np.asarray(first_metric)
         second_total += np.asarray(second_metric)
         third_total += np.asarray(third_metric)
-    avg_metric = [first_total / len(image_list), second_total /
-                  len(image_list), third_total / len(image_list)]
+    avg_metric = [first_total / len(image_list), second_total / len(image_list), third_total / len(image_list)]
     return avg_metric
 
 if __name__ == '__main__':
