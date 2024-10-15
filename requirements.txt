@@ -1,6 +1,6 @@
 h5py==3.12.1
 torch==2.4.1
-scipy==1.14.1
+scipy==1.14.0
 matplotlib==3.9.2
 torchvision==0.19.1
 MedPy==0.5.2
