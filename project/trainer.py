@@ -156,23 +156,21 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
 
-                lr_ = base_lr * (1.0 - iter_num / cfg.max_iter) ** 0.9
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr_
+                # lr_ = base_lr * (1.0 - iter_num / cfg.max_iter) ** 0.9
+                # for param_group in optimizer.param_groups:
+                #     param_group['lr'] = lr_
 
                 iter_num = iter_num + 1
 
                 # Logging
-                run["train/lr"].append(lr_,step=iter_num)
+                # run["train/lr"].append(lr_,step=iter_num)
                 run["train/loss"].append(loss,step=iter_num)
                 run["train/supervised_loss"].append(supervised_loss,step=iter_num)
                 run["train/loss_ce"].append(loss_ce,step=iter_num)
                 run["train/loss_dice"].append(loss_dice,step=iter_num)
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                iterator.set_postfix(
-                    {"iter_num":iter_num,"loss":loss.item(),"loss_ce":loss_ce.item(),"loss_dice":loss_dice.item()}
-                )
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_ce":loss_ce.item(),"loss_dice":loss_dice.item()})
 
                 # Image log
                 # if iter_num % 10 == 0:

@@ -116,4 +116,4 @@ if __name__ == '__main__':
     FLAGS = parser.parse_args()
     metric = Inference(FLAGS)
     print("Metrics avg per class:",metric)
-    print("Metrics avg total:"(metric[0]+metric[1]+metric[2])/3)
+    print("Metrics avg total:",(metric[0]+metric[1]+metric[2])/3)
