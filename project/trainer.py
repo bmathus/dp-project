@@ -108,10 +108,11 @@ class Trainer:
                 outputs_aux3_soft = torch.softmax(outputs_aux3, dim=1)
 
                 #SUP CE loss (outputs <-> labels)
-                loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
-                loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-                loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-                loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                loss_ce = 0
+                # loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
+                # loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                # loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                # loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
 
                 #SUP Dice loss (outputs_soft <-> labels)
                 loss_dice = dice_loss(outputs_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
@@ -120,7 +121,8 @@ class Trainer:
                 loss_dice_aux3 = dice_loss(outputs_aux3_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
 
                 #SUP loss
-                supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
+                # supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
+                supervised_loss = (loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/4
 
                 preds = (outputs_soft+outputs_aux1_soft +outputs_aux2_soft+outputs_aux3_soft)/4 #priemer pravdep predickie všetkých škal (labeled aj unlabeled)
                 
@@ -170,7 +172,7 @@ class Trainer:
                 run["train/loss_dice"].append(loss_dice,step=iter_num)
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_ce":loss_ce.item(),"loss_dice":loss_dice.item()})
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item()})
 
                 # Image log
                 # if iter_num % 10 == 0:
