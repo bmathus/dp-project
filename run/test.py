@@ -24,8 +24,8 @@ def calculate_metric_percase(pred, gt):
     gt[gt > 0] = 1
     dice = metric.binary.dc(pred, gt)
     jc = metric.binary.jc(pred, gt)
-    asd = metric.binary.asd(pred, gt)
     hd95 = metric.binary.hd95(pred, gt)
+    asd = metric.binary.asd(pred, gt)
     return dice, jc, hd95, asd
 
 
