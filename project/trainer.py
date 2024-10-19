@@ -108,11 +108,10 @@ class Trainer:
                 outputs_aux3_soft = torch.softmax(outputs_aux3, dim=1)
 
                 #SUP CE loss (outputs <-> labels)
-                loss_ce = 0
-                # loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
-                # loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-                # loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-                # loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
+                loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
+                loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
 
                 #SUP Dice loss (outputs_soft <-> labels)
                 loss_dice = dice_loss(outputs_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
@@ -121,8 +120,8 @@ class Trainer:
                 loss_dice_aux3 = dice_loss(outputs_aux3_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
 
                 #SUP loss
-                # supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
-                supervised_loss = (loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/4
+                supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
+                # supervised_loss = (loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/4
 
                 preds = (outputs_soft+outputs_aux1_soft +outputs_aux2_soft+outputs_aux3_soft)/4 #priemer pravdep predickie všetkých škal (labeled aj unlabeled)
                 
@@ -139,20 +138,21 @@ class Trainer:
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
     
                 consistency_dist_main = (preds[cfg.labeled_bs:] - outputs_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_main = torch.mean(consistency_dist_main * exp_variance_main) / (torch.mean(exp_variance_main) + 1e-8) + torch.mean(variance_main)
+                consistency_loss_main = torch.mean(consistency_dist_main * exp_variance_main) / (torch.mean(exp_variance_main) + 1e-8)
 
                 consistency_dist_aux1 = (preds[cfg.labeled_bs:] - outputs_aux1_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux1 = torch.mean(consistency_dist_aux1 * exp_variance_aux1) / (torch.mean(exp_variance_aux1) + 1e-8) + torch.mean(variance_aux1)
+                consistency_loss_aux1 = torch.mean(consistency_dist_aux1 * exp_variance_aux1) / (torch.mean(exp_variance_aux1) + 1e-8) 
 
                 consistency_dist_aux2 = (preds[cfg.labeled_bs:] - outputs_aux2_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux2 = torch.mean(consistency_dist_aux2 * exp_variance_aux2) / (torch.mean(exp_variance_aux2) + 1e-8) + torch.mean(variance_aux2)
+                consistency_loss_aux2 = torch.mean(consistency_dist_aux2 * exp_variance_aux2) / (torch.mean(exp_variance_aux2) + 1e-8) 
 
                 consistency_dist_aux3 = (preds[cfg.labeled_bs:] - outputs_aux3_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux3 = torch.mean(consistency_dist_aux3 * exp_variance_aux3) / (torch.mean(exp_variance_aux3) + 1e-8) + torch.mean(variance_aux3)
+                consistency_loss_aux3 = torch.mean(consistency_dist_aux3 * exp_variance_aux3) / (torch.mean(exp_variance_aux3) + 1e-8) 
 
                 consistency_loss = (consistency_loss_main + consistency_loss_aux1 + consistency_loss_aux2 + consistency_loss_aux3) / 4
+                uncertainty_min = (torch.mean(variance_main) + torch.mean(variance_aux1) + torch.mean(variance_aux2) + torch.mean(variance_aux3)) / 4
 
-                loss = supervised_loss + consistency_weight * consistency_loss
+                loss = supervised_loss + consistency_weight * ((0.5 * consistency_loss) + (0.5 * uncertainty_min))
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -171,8 +171,9 @@ class Trainer:
                 run["train/loss_ce"].append(loss_ce,step=iter_num)
                 run["train/loss_dice"].append(loss_dice,step=iter_num)
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
+                run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item()})
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item(),"loss_ce":loss_ce.item()})
 
                 # Image log
                 # if iter_num % 10 == 0:
