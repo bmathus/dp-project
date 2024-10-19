@@ -173,7 +173,7 @@ class Trainer:
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
                 # run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item(),"loss_ce":loss_ce.item()})
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item()})
 
                 # Image log
                 # if iter_num % 10 == 0:
