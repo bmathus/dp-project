@@ -139,20 +139,24 @@ class Trainer:
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
     
                 consistency_dist_main = (preds[cfg.labeled_bs:] - outputs_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_main = torch.mean(consistency_dist_main * exp_variance_main) / (torch.mean(exp_variance_main) + 1e-8) + torch.mean(variance_main)
+                consistency_loss_main = torch.mean(consistency_dist_main * exp_variance_main) / (torch.mean(exp_variance_main) + 1e-8) 
 
                 consistency_dist_aux1 = (preds[cfg.labeled_bs:] - outputs_aux1_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux1 = torch.mean(consistency_dist_aux1 * exp_variance_aux1) / (torch.mean(exp_variance_aux1) + 1e-8) + torch.mean(variance_aux1)
+                consistency_loss_aux1 = torch.mean(consistency_dist_aux1 * exp_variance_aux1) / (torch.mean(exp_variance_aux1) + 1e-8)
 
                 consistency_dist_aux2 = (preds[cfg.labeled_bs:] - outputs_aux2_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux2 = torch.mean(consistency_dist_aux2 * exp_variance_aux2) / (torch.mean(exp_variance_aux2) + 1e-8) + torch.mean(variance_aux2)
+                consistency_loss_aux2 = torch.mean(consistency_dist_aux2 * exp_variance_aux2) / (torch.mean(exp_variance_aux2) + 1e-8) 
 
                 consistency_dist_aux3 = (preds[cfg.labeled_bs:] - outputs_aux3_soft[cfg.labeled_bs:]) ** 2
-                consistency_loss_aux3 = torch.mean(consistency_dist_aux3 * exp_variance_aux3) / (torch.mean(exp_variance_aux3) + 1e-8) + torch.mean(variance_aux3)
+                consistency_loss_aux3 = torch.mean(consistency_dist_aux3 * exp_variance_aux3) / (torch.mean(exp_variance_aux3) + 1e-8) 
 
                 consistency_loss = (consistency_loss_main + consistency_loss_aux1 + consistency_loss_aux2 + consistency_loss_aux3) / 4
 
-                loss = supervised_loss + consistency_weight * consistency_loss
+                uncertainty_min = (torch.mean(variance_main) + torch.mean(variance_aux1) + torch.mean(variance_aux2) + torch.mean(variance_aux3)) / 4
+
+                loss = supervised_loss + consistency_weight * ((0.5 * consistency_loss) + (0.5 * uncertainty_min))
+
+                # loss = supervised_loss + consistency_weight * consistency_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -171,7 +175,7 @@ class Trainer:
                 run["train/loss_ce"].append(loss_ce,step=iter_num)
                 run["train/loss_dice"].append(loss_dice,step=iter_num)
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
-                # run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
+                run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
                 iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item()})
 
