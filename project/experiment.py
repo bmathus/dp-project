@@ -1,5 +1,5 @@
 from pathlib import Path
-from project.trainer import Trainer
+from project.trainer_urpc import Trainer
 from project.logging import Logger
 from argparse import Namespace
 import yaml
