@@ -11,17 +11,11 @@ from torch.utils.data.sampler import Sampler
 
 # from dataloaders.dataset import BaseDataSets, RandomGenerator, TwoStreamBatchSampler
 class BaseDataSets(Dataset):
-    def __init__(self,base_dir: str,split="train",num=None,transform=None,ops_weak=None,ops_strong=None):
+    def __init__(self,base_dir: str,split="train",num=None,transform=None):
         self._base_dir = base_dir
         self.sample_list = []
         self.split = split
         self.transform = transform
-        self.ops_weak = ops_weak
-        self.ops_strong = ops_strong
-
-        assert bool(ops_weak) == bool(
-            ops_strong
-        ), "For using CTAugment learned policies, provide both weak and strong batch augmentation policy"
 
         if self.split == "train":
             with open(self._base_dir + "/train_slices.list", "r") as f1:
@@ -49,10 +43,7 @@ class BaseDataSets(Dataset):
         label = h5f["label"][:]
         sample = {"image": image, "label": label}
         if self.split == "train":
-            if None not in (self.ops_weak, self.ops_strong):
-                sample = self.transform(sample, self.ops_weak, self.ops_strong)
-            else:
-                sample = self.transform(sample)
+            sample = self.transform(sample)
         sample["idx"] = idx
         return sample
 
