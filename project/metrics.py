@@ -42,6 +42,9 @@ class DiceLoss(nn.Module):
             loss += dice * weight[i]
         return loss / self.n_classes
 
+def mse_loss(input1, input2):
+    return torch.mean((input1 - input2)**2)
+
 def test_single_volume_ds(image, label, net, classes,device: str, patch_size=[256, 256]):
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
     #(1, 10, 256, 256) squeeze-> (10,256,256) -> detach (gradient not longer computed for tensor)

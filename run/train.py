@@ -33,6 +33,10 @@ if __name__ == "__main__":
     p.add_argument('--consistency', type=float,default=0.1, help='consistency')
     p.add_argument('--consistency_rampup', type=float,default=200.0, help='consistency_rampup')
 
+    # MTNet
+    p.add_argument('--temperature', type=float, default=0.1, help='temperature of sharpening')
+    p.add_argument('--lamda', type=float, default=1, help='weight to balance all losses')
+
 
     cfg = p.parse_args()
     main(cfg)

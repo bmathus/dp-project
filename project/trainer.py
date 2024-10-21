@@ -7,7 +7,8 @@ from tqdm import tqdm
 from project.logging import Logger
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device
-from project.metrics import DiceLoss,test_single_volume_ds
+from project.metrics import DiceLoss,mse_loss,test_single_volume_ds
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
@@ -68,6 +69,92 @@ class Trainer:
         valloader = DataLoader(db_val, batch_size=1, shuffle=False,num_workers=1)
 
         return trainloader,valloader,len(db_train),len(db_val)
+
+    def fit_mtnet(self,experiment_path: Path,run: Run):
+        base_lr = self.cfg.base_lr
+        cfg = self.cfg
+
+        trainloader,valloader,total_samples,total_val_samples = self.setup_dataloaders(cfg)
+
+        self.model.train()
+
+        optimizer = optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
+        ce_loss = CrossEntropyLoss()
+        consistency_criterion = mse_loss
+        dice_loss = DiceLoss(cfg.num_classes)
+
+        self.log.on_training_start()
+        max_epoch = cfg.max_iter // len(trainloader) + 1
+        iter_num = 0
+        best_performance = 0.0
+        iterator = tqdm(range(max_epoch), desc="| Training:")
+        for _ in iterator:
+            for _, sampled_batch in enumerate(trainloader):
+                # Data to device
+                volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
+                volume_batch, label_batch = volume_batch.to(self.device), label_batch.to(self.device)
+
+                outputs = self.model(volume_batch)
+                num_outputs = len(outputs)
+
+                y_ori = torch.zeros((num_outputs,) + outputs[0].shape)
+                y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape)
+
+                loss_seg = 0
+                loss_seg_dice = 0 
+                for idx in range(num_outputs):
+                    y = outputs[idx][:cfg.labeled_bs,...]
+                    y_prob = F.softmax(y, dim=1)
+                    loss_seg += ce_loss(y, label_batch[:cfg.labeled_bs][:].long())
+                    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+                    y_all = outputs[idx]
+                    y_prob_all = F.softmax(y_all, dim=1)
+                    y_ori[idx] = y_prob_all
+                    y_pseudo_label[idx] = sharpening(y_prob_all,cfg)
+                
+                loss_consist = 0
+                for i in range(num_outputs):
+                    for j in range(num_outputs):
+                        if i != j:
+                            loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
+                
+                consistency_weight = get_current_consistency_weight(iter_num//150)
+
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                iter_num = iter_num + 1
+
+                #Logging
+                run["train/lr"].append(base_lr,step=iter_num)
+                run["train/loss"].append(loss,step=iter_num)
+                run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
+                run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
+                run["train/consistency_loss"].append(loss_consist,step=iter_num)
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist":loss_consist.item()})
+
+                # Validation
+                if iter_num > 0 and iter_num % 200 == 0:
+                    print(f" > Validating at iter: {iter_num}")
+
+                    self.model.eval() #switch model to validation
+                    performance = self.validation(valloader,total_val_samples,iter_num,cfg,run)
+
+                    if performance > best_performance: #Save best bodel
+                        best_performance = performance
+                        best_model_path = os.path.join(experiment_path,'best_model.pth')
+                        torch.save(self.model.state_dict(),best_model_path)
+                        print(f" > Saving best model iter:{iter_num}, dice:{round(best_performance, 4)}")
+                        run["val/best_model_dice"].append(best_performance,step=iter_num)
+                    
+                    self.model.train()  #switch to training
+
+
+
 
 
     def fit_urpc(self, experiment_path: Path,run: Run):
@@ -247,3 +334,8 @@ def sigmoid_rampup(current, rampup_length):
         current = np.clip(current, 0.0, rampup_length)
         phase = 1.0 - current / rampup_length
         return float(np.exp(-5.0 * phase * phase))
+
+def sharpening(P,cfg):
+    T = 1/cfg.temperature
+    P_sharpen = P ** T / (P ** T + (1-P) ** T)
+    return P_sharpen
