@@ -1,7 +1,7 @@
 import argparse
 from medpy import metric
 from scipy.ndimage import zoom
-from project.trainer_urpc import decide_device
+from project.trainer import decide_device
 from project.models.unet_urpc import UNet_URPC
 import os
 import h5py
