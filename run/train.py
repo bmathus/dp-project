@@ -19,7 +19,7 @@ if __name__ == "__main__":
     p.add_argument('--seed', type=int,  default=1337, help='Random seed')
     p.add_argument('--deterministic',"-dt", type=int,  default=1,help='Whether use deterministic training')
 
-    p.add_argument("--max_iter","-e", type=int, default=30000, help="Number of iterations")
+    p.add_argument("--max_iter","-e", type=int, default=20000, help="Number of iterations")
     p.add_argument("--base_lr","-lr", type=float, default=0.01, help="Segmentation network learning rate")
     p.add_argument('--num_classes', type=int, default=4, help='Output channel of network')
 

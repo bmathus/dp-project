@@ -154,9 +154,6 @@ class Trainer:
                     self.model.train()  #switch to training
 
 
-
-
-
     def fit_urpc(self, experiment_path: Path,run: Run):
         base_lr = self.cfg.base_lr
         cfg = self.cfg
