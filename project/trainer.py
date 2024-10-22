@@ -183,7 +183,7 @@ class Trainer:
                 outputs, outputs_aux1, outputs_aux2, outputs_aux3 = self.model(volume_batch)
 
                 # Calculate loss terms
-                supervised_loss,loss_dice,loss_ce,consistency_loss,uncertainty_min = self.urpc_loss(
+                supervised_loss,loss_dice,loss_ce,consistency_loss = self.urpc_loss(
                     cfg,
                     (outputs, outputs_aux1, outputs_aux2, outputs_aux3),
                     label_batch,
@@ -191,10 +191,11 @@ class Trainer:
                     ce_loss,
                     kl_distance
                 )
+            
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
                 
                 # Overall loss
-                loss = supervised_loss + consistency_weight * ((0.5 * consistency_loss) + (0.5 * uncertainty_min))
+                loss = supervised_loss + consistency_weight * consistency_loss
                 # loss = supervised_loss + consistency_weight * consistency_loss
 
                 optimizer.zero_grad()
@@ -214,7 +215,7 @@ class Trainer:
                 run["train/loss_ce"].append(loss_ce,step=iter_num)
                 run["train/loss_dice"].append(loss_dice,step=iter_num)
                 run["train/consistency_loss"].append(consistency_loss,step=iter_num)  
-                run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
+                # run["train/uncertainty_min"].append(uncertainty_min,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
                 iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_dice":loss_dice.item()})
                 
@@ -313,9 +314,9 @@ class Trainer:
 
         consistency_loss = (consistency_loss_main + consistency_loss_aux1 + consistency_loss_aux2 + consistency_loss_aux3) / 4
 
-        uncertainty_min = (torch.mean(variance_main) + torch.mean(variance_aux1) + torch.mean(variance_aux2) + torch.mean(variance_aux3)) / 4
+        # uncertainty_min = (torch.mean(variance_main) + torch.mean(variance_aux1) + torch.mean(variance_aux2) + torch.mean(variance_aux3)) / 4
 
-        return supervised_loss,loss_dice,loss_ce,consistency_loss,uncertainty_min
+        return supervised_loss,loss_dice,loss_ce,consistency_loss,#uncertainty_min
 
 
 # Utils ktore su pre istotu v rovnakom subore kvoli np.random
