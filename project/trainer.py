@@ -195,7 +195,7 @@ class Trainer:
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
                 
                 # Overall loss
-                loss = supervised_loss + consistency_weight * consistency_loss
+                loss = supervised_loss + consistency_weight * (0.5 * consistency_loss)
                 # loss = supervised_loss + consistency_weight * consistency_loss
 
                 optimizer.zero_grad()
