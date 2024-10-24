@@ -138,3 +138,22 @@ class MCNet2d_v1(nn.Module):
         output2 = self.decoder2(feature)
         return output1, output2
 
+
+class UNet(nn.Module):
+    def __init__(self, in_chns, class_num):
+        super(UNet, self).__init__()
+
+        params1 = {'in_chns': in_chns,
+                  'feature_chns': [16, 32, 64, 128, 256],
+                  'dropout': [0.05, 0.1, 0.2, 0.3, 0.5],
+                  'class_num': class_num,
+                  'up_type': 1,
+                  'acti_func': 'relu'}
+
+        self.encoder = Encoder(params1)
+        self.decoder1 = Decoder(params1)
+
+    def forward(self, x):
+        feature = self.encoder(x)
+        output1 = self.decoder1(feature)
+        return output1
