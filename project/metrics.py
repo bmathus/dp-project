@@ -45,10 +45,25 @@ class DiceLoss(nn.Module):
 def mse_loss(input1, input2):
     return torch.mean((input1 - input2)**2)
 
+
+def inference_urpc(model,input):
+    output, _, _, _ = model(input)
+    return output
+
+def inference_mtnet(model,input):
+    output = model(input)
+    if len(output)>1:
+        output = output[0]
+    return output
+
 def test_single_volume_ds(image, label, model,device: str,cfg):
+    if cfg.network == "urpc":
+        inference = inference_urpc
+    else:
+        inference = inference_mtnet
+
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
     #(1, 10, 256, 256) squeeze-> (10,256,256) -> detach (gradient not longer computed for tensor)
-
     prediction = np.zeros_like(label)
 
     for ind in range(image.shape[0]): # iterate over channel index eg. 0 until 9
@@ -58,13 +73,7 @@ def test_single_volume_ds(image, label, model,device: str,cfg):
         input = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().to(device)
         model.eval()
         with torch.no_grad():
-            if cfg.network == "urpc":
-                output, _, _, _ = model(input)
-            elif cfg.network == "mtnet":
-                output = model(input)
-                if len(output)>1:
-                    output = output[0]
-
+            output = inference(model,input)
             out = torch.argmax(torch.softmax(output, dim=1), dim=1).squeeze(0)
             out = out.cpu().detach().numpy()
             pred = zoom(out, (x / cfg.patch_size, y / cfg.patch_size), order=0)
