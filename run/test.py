@@ -2,7 +2,7 @@ import argparse
 from medpy import metric
 from scipy.ndimage import zoom
 from project.trainer import decide_device
-from project.models.unet_urpc import UNet_URPC
+from project.models import unet_mtnet,unet_urpc
 import os
 import h5py
 import numpy as np
@@ -12,11 +12,10 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
-parser.add_argument("--run_path", "-r", type=str, default="./data/experiments/basic/run-0cad2483", help="Path to run dir")
-# parser.add_argument('--exp', type=str,default='ACDC/Fully_Supervised', help='experiment_name')
-parser.add_argument('--model', type=str,default='unet_urds', help='model_name')
+parser.add_argument("--run_path", "-r", type=str, default="", help="Path to run dir")
 parser.add_argument('--num_classes', type=int,  default=4,help='Output channel of network')
 parser.add_argument('--labeled_num', type=int, default=7, help='Num of labeled data')
+parser.add_argument("--network", "-nt", type=str, default="mtnet", help="Network to train")
 
 
 def calculate_metric_percase(pred, gt):
@@ -41,10 +40,13 @@ def test_single_volume(case, net, FLAGS,device):
         input = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().to(device)
         net.eval()
         with torch.no_grad():
-            if FLAGS.model == "unet_urds":
+            if FLAGS.network == "urpc":
                 out_main, _, _, _ = net(input)
             else:
                 out_main = net(input)
+                if len(out_main)>1:
+                    out_main=out_main[0]
+
             out = torch.argmax(torch.softmax(out_main, dim=1), dim=1).squeeze(0)
             out = out.cpu().detach().numpy()
             pred = zoom(out, (x / 256, y / 256), order=0)
@@ -91,12 +93,18 @@ def Inference(FLAGS):
 
     #Setup device and model
     device = torch.device(decide_device())
-    net = UNet_URPC(in_chns=1,class_num=FLAGS.num_classes)
+    if FLAGS.network == "urpc":
+        net = unet_urpc.UNet_URPC(in_chns=1,class_num=FLAGS.num_classes)
+        print("> Testing model: URPC")
+    else:
+        net = unet_mtnet.UNet(in_chns=1,class_num=FLAGS.num_classes)
+        print("> Testing model: MCNet2d_v1")
+
     net = net.to(device) 
 
     # Load model weights
     model_path = os.path.join(FLAGS.run_path, 'best_model.pth')
-    net.load_state_dict(torch.load(model_path))
+    net.load_state_dict(torch.load(model_path),strict=False)
     print(" > Loaded model weights from:",model_path)
 
     net.eval()
