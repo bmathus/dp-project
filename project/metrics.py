@@ -45,7 +45,7 @@ class DiceLoss(nn.Module):
 def mse_loss(input1, input2):
     return torch.mean((input1 - input2)**2)
 
-def test_single_volume_ds(image, label, net, classes,device: str, patch_size=[256, 256]):
+def test_single_volume_ds(image, label, model,device: str,cfg):
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
     #(1, 10, 256, 256) squeeze-> (10,256,256) -> detach (gradient not longer computed for tensor)
 
@@ -54,17 +54,23 @@ def test_single_volume_ds(image, label, net, classes,device: str, patch_size=[25
     for ind in range(image.shape[0]): # iterate over channel index eg. 0 until 9
         slice = image[ind, :, :] # (256, 224)
         x, y = slice.shape[0], slice.shape[1] # 256, 224
-        slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=0) # 1, 1.14 -> after zoom (256,256)
+        slice = zoom(slice, (cfg.patch_size / x, cfg.patch_size / y), order=0) # 1, 1.14 -> after zoom (256,256)
         input = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().to(device)
-        net.eval()
+        model.eval()
         with torch.no_grad():
-            output_main, _, _, _ = net(input)
-            out = torch.argmax(torch.softmax(output_main, dim=1), dim=1).squeeze(0)
+            if cfg.network == "urpc":
+                output, _, _, _ = model(input)
+            elif cfg.network == "mtnet":
+                output = model(input)
+                if len(output)>1:
+                    output = output[0]
+
+            out = torch.argmax(torch.softmax(output, dim=1), dim=1).squeeze(0)
             out = out.cpu().detach().numpy()
-            pred = zoom(out, (x / patch_size[0], y / patch_size[1]), order=0)
+            pred = zoom(out, (x / cfg.patch_size, y / cfg.patch_size), order=0)
             prediction[ind] = pred
     metric_list = []
-    for i in range(1, classes):
+    for i in range(1, cfg.num_classes):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
     return metric_list
 

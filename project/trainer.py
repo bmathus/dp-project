@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
-from project.models.unet_urpc import UNet_URPC
+from project.models import unet_mtnet,unet_urpc
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -42,7 +42,8 @@ class Trainer:
         print("| Setting up device:",self.device)
 
         # Create model
-        self.model: nn.Module = UNet_URPC(in_chns=1,class_num=cfg.num_classes)
+        # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
+        self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup(self, log: Logger):
@@ -119,7 +120,7 @@ class Trainer:
                         if i != j:
                             loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
                 
-                consistency_weight = get_current_consistency_weight(iter_num//150)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
                 loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
 
@@ -152,6 +153,21 @@ class Trainer:
                         run["val/best_model_dice"].append(best_performance,step=iter_num)
                     
                     self.model.train()  #switch to training
+                
+                # Save frequently
+                if iter_num % 3000 == 0:
+                    save_path = os.path.join(experiment_path, 'iter_' + str(iter_num) + '.pth')
+                    torch.save(self.model.state_dict(), save_path)
+                    print(f" > Saving model to:{save_path}")
+                
+                if iter_num >= cfg.max_iter:
+                    break
+
+            if iter_num >= cfg.max_iter:
+                iterator.close()
+                break
+
+        self.log.on_training_stop()
 
 
     def fit_urpc(self, experiment_path: Path,run: Run):
@@ -254,7 +270,7 @@ class Trainer:
     def validation(self,valloader,total_val_samples,iter_num, cfg, run: Run):
         metric_list = 0.0
         for _, sampled_batch in enumerate(valloader):
-            metric_i = test_single_volume_ds(sampled_batch["image"], sampled_batch["label"], self.model, classes=cfg.num_classes,device=self.device)
+            metric_i = test_single_volume_ds(sampled_batch["image"], sampled_batch["label"], self.model,self.device,cfg)
             metric_list += np.array(metric_i)
         metric_list = metric_list / total_val_samples
 

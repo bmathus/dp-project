@@ -11,9 +11,10 @@ if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="urpc-beta-urc", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="mtnet-first", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
+    p.add_argument("--network", "-nt", type=str, default="mtnet", help="Network to train")
 
     # p.add_argument("--checkpoint_freq","-cf", type=int, default=2, help="Frequency of saving model & opt checkpoints")
     p.add_argument('--seed', type=int,  default=1337, help='Random seed')
