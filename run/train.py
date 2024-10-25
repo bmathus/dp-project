@@ -1,9 +1,4 @@
 from argparse import ArgumentParser
-import os
-if __name__ == "__main__":
-    os.environ['PYTHONPATH'] = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    print("PYTHONPATH set to:", os.environ['PYTHONPATH'])
-
 from project.experiment import Experiment  # noqa: E402
 
 def main(cfg):
