@@ -1,6 +1,11 @@
 from argparse import ArgumentParser
+import os
+if __name__ == "__main__":
+    project_path = os.getcwd()
+    os.environ['PYTHONPATH'] = project_path
+    print("PYTHONPATH set to:", os.environ['PYTHONPATH'])
 
-from project.experiment import Experiment
+from project.experiment import Experiment  # noqa: E402
 
 def main(cfg):
     # Start new training experiment
@@ -14,6 +19,7 @@ if __name__ == "__main__":
     p.add_argument("--name", "-n", type=str, default="mtnet-first", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
+    p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
     p.add_argument("--network", "-nt", type=str, default="mtnet", help="Network to train")
 
     # p.add_argument("--checkpoint_freq","-cf", type=int, default=2, help="Frequency of saving model & opt checkpoints")

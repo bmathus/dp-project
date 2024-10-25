@@ -6,7 +6,7 @@ import yaml
 import neptune
 import uuid
 
-BASE_PATH = Path("data/experiments")
+
 
 
 class Experiment:
@@ -19,13 +19,13 @@ class Experiment:
 
         # Resuming experiment
         if self.resuming_run:
-            self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
+            self.experiment_path = Path(self.cfg.base_path)/"experiments"/ self.cfg.name / self.cfg.ver
             self._load_param_config()
             print(f" > Resuming experiment : {self.cfg.name}/{self.cfg.ver}")
         # Creating new experiment
         else:
             self.cfg.ver = "run-" + str(uuid.uuid4())[:8]
-            self.experiment_path = BASE_PATH / self.cfg.name / self.cfg.ver
+            self.experiment_path = Path(self.cfg.base_path)/"experiments"/ self.cfg.name / self.cfg.ver
             self.experiment_path.mkdir(parents=True, exist_ok=True)
             self._save_param_config(self.cfg, self.experiment_path)
             print(f" > Created experiment : {self.cfg.name}/{self.cfg.ver}")
