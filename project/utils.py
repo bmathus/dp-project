@@ -6,8 +6,8 @@ def worker_init_fn(worker_id):
 
 
 def decide_device():
-    if (torch.cuda.is_available()): 
-        return "cuda"
-    if (torch.backends.mps.is_available()):
-        return "mps"
-    return "cpu"
+    # if (torch.cuda.is_available()): 
+    #     return "cuda"
+    # if (torch.backends.mps.is_available()):
+    #     return "mps"
+    return "cuda"
