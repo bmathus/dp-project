@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
-from project.models import unet_mtnet,unet_urpc
+from project.models import unet_mtnet
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run

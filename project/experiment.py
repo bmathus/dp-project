@@ -2,6 +2,7 @@ from pathlib import Path
 from project.trainer import Trainer
 from project.logging import Logger
 from argparse import Namespace
+from run.test import Inference
 import yaml
 import neptune
 import uuid
@@ -50,6 +51,29 @@ class Experiment:
             self.trainer.fit_mtnet(self.experiment_path,self.run)
         else:
             print("No fit dunction")
+
+        # Setup test config
+        test_cfg = Namespace(
+            data_path = self.cfg.data_path,
+            run_path = self.experiment_path,
+            num_classes = self.cfg.num_classes,
+            labeled_num = self.cfg.labeled_num,
+            network = self.cfg.network
+        )
+
+        metric = Inference(test_cfg)
+        print("Metrics avg per class:",metric)
+        metric_avg = (metric[0]+metric[1]+metric[2])/3
+        print("Metrics avg total:",metric_avg)
+
+        self.run["test/class1_metrics"].extend(metric[0].tolist())
+        self.run["test/class2_metrics"].extend(metric[1].tolist())
+        self.run["test/class3_metrics"].extend(metric[2].tolist())
+
+        self.run["test/dice"] = metric_avg[0]
+        self.run["test/jc"] = metric_avg[1]
+        self.run["test/hd95"] = metric_avg[2]
+        self.run["test/asd"] = metric_avg[3]
 
         # End run
         self.run.stop()

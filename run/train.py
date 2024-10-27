@@ -1,6 +1,8 @@
 from argparse import ArgumentParser
 from project.experiment import Experiment  # noqa: E402
 
+
+
 def main(cfg):
     # Start new training experiment
     experiment = Experiment(cfg)
@@ -10,7 +12,7 @@ if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="mtnet-first", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="mtnet-first-test", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
