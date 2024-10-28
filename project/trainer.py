@@ -7,7 +7,7 @@ from tqdm import tqdm
 from project.logging import Logger
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device
-from project.metrics import DiceLoss,mse_loss,test_single_volume_ds
+from project.metrics import DiceLoss,mse_loss,test_single_volume_ds,DiceLossDif
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -82,7 +82,7 @@ class Trainer:
         optimizer = optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
         ce_loss = CrossEntropyLoss()
         consistency_criterion = mse_loss
-        dice_loss = DiceLoss(cfg.num_classes)
+        dice_loss = DiceLossDif(cfg.num_classes)
 
         self.log.on_training_start()
         max_epoch = cfg.max_iter // len(trainloader) + 1
