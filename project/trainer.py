@@ -96,29 +96,15 @@ class Trainer:
                 volume_batch, label_batch = volume_batch.to(self.device), label_batch.to(self.device)
 
                 outputs = self.model(volume_batch)
-                num_outputs = len(outputs)
 
-                y_ori = torch.zeros((num_outputs,) + outputs[0].shape)
-                y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape)
-
-                loss_seg = 0
-                loss_seg_dice = 0 
-                for idx in range(num_outputs):
-                    y = outputs[idx][:cfg.labeled_bs,...]
-                    y_prob = F.softmax(y, dim=1)
-                    loss_seg += ce_loss(y, label_batch[:cfg.labeled_bs][:].long())
-                    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-                    y_all = outputs[idx]
-                    y_prob_all = F.softmax(y_all, dim=1)
-                    y_ori[idx] = y_prob_all
-                    y_pseudo_label[idx] = sharpening(y_prob_all,cfg)
-                
-                loss_consist = 0
-                for i in range(num_outputs):
-                    for j in range(num_outputs):
-                        if i != j:
-                            loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
+                loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                    outputs=outputs,
+                    label_batch=label_batch,
+                    ce_loss=ce_loss,
+                    dice_loss=dice_loss,
+                    consistency_criterion=consistency_criterion,
+                    cfg=cfg
+                )
                 
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
@@ -334,6 +320,30 @@ class Trainer:
 
         return supervised_loss,loss_dice,loss_ce,consistency_loss,#uncertainty_min
 
+    def mtnet_loss(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion,cfg):
+        num_outputs = len(outputs)
+        y_ori = torch.zeros((num_outputs,) + outputs[0].shape)
+        y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape)
 
+        loss_seg = 0
+        loss_seg_dice = 0 
+        for idx in range(num_outputs):
+            y = outputs[idx][:cfg.labeled_bs,...]
+            y_prob = F.softmax(y, dim=1)
+            loss_seg += ce_loss(y, label_batch[:cfg.labeled_bs][:].long())
+            loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+            y_all = outputs[idx]
+            y_prob_all = F.softmax(y_all, dim=1)
+            y_ori[idx] = y_prob_all
+            y_pseudo_label[idx] = sharpening(y_prob_all,cfg)
+        
+        loss_consist = 0
+        for i in range(num_outputs):
+            for j in range(num_outputs):
+                if i != j:
+                    loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
+        
+        return loss_seg_dice,loss_seg,loss_consist
 
 
