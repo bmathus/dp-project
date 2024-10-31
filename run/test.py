@@ -2,7 +2,7 @@
 from medpy import metric
 from scipy.ndimage import zoom
 from project.trainer import decide_device
-from project.models import unet_mtnet,unet_urpc
+from project.models import unet_mtnet,unet_urpc,unet_hybrid
 import os
 import h5py
 import numpy as np
@@ -95,9 +95,12 @@ def Inference(FLAGS):
     if FLAGS.network == "urpc":
         net = unet_urpc.UNet_URPC(in_chns=1,class_num=FLAGS.num_classes)
         print("> Testing model: URPC")
-    else:
+    elif FLAGS.network == "mtnet":
         net = unet_mtnet.UNet(in_chns=1,class_num=FLAGS.num_classes)
         print("> Testing model: MCNet2d_v1")
+    elif FLAGS.network == "msdnet":
+        net = unet_hybrid.UNet_MSD(in_chns=1,class_num=FLAGS.num_classes)
+        print("> Testing model: MCDNet")
 
     net = net.to(device) 
 

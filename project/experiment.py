@@ -47,10 +47,8 @@ class Experiment:
         self.trainer.setup(log=Logger(self.run))
         if self.cfg.network == "urpc":
             self.trainer.fit_urpc(self.experiment_path, self.run)
-        elif self.cfg.network == "mtnet":
-            self.trainer.fit_mtnet(self.experiment_path,self.run)
         else:
-            print("No fit dunction")
+            self.trainer.fit_mtnet(self.experiment_path,self.run)
 
         # Setup test config
         test_cfg = Namespace(

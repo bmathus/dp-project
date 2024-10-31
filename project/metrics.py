@@ -47,6 +47,9 @@ class DiceLoss(nn.Module):
 def mse_loss(input1, input2):
     return torch.mean((input1 - input2)**2)
 
+def inference_msdnet(model,input):
+    output = model(input)
+    return output[0][0]
 
 def inference_urpc(model,input):
     output, _, _, _ = model(input)
@@ -61,6 +64,8 @@ def inference_mtnet(model,input):
 def test_single_volume_ds(image, label, model,device: str,cfg):
     if cfg.network == "urpc":
         inference = inference_urpc
+    elif cfg.network == "msdnet":
+        inference = inference_msdnet
     else:
         inference = inference_mtnet
 
