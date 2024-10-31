@@ -353,3 +353,36 @@ def sharpening(P,cfg):
     T = 1/cfg.temperature
     P_sharpen = P ** T / (P ** T + (1-P) ** T)
     return P_sharpen
+
+
+def show_sample(image,label):
+
+    # Convert PyTorch tensor (image) to NumPy array and squeeze the channel dimension if necessary
+    if isinstance(image, np.ndarray):
+        image_np = image  # Already a NumPy array
+    else:
+        image_np = image.numpy()  # Convert PyTorch tensor to NumPy array
+    
+    # Squeeze the singleton channel dimension (1, 254, 254) -> (254, 254)
+    if image_np.shape[0] == 1:
+        image_np = np.squeeze(image_np, axis=0)  # Remove the channel dimension
+
+    # Define a color map for the labels: 0 (background), 1, 2, 3
+    cmap = colors.ListedColormap(['black', 'red', 'green', 'blue'])  # Customize these colors as needed
+    bounds = [0, 1, 2, 3, 4]  # Boundaries for the label values
+    norm = colors.BoundaryNorm(bounds, cmap.N)
+
+    plt.figure(figsize=(10, 5))
+
+    # Plot the image (assuming it's grayscale)
+    plt.subplot(1, 2, 1)
+    plt.imshow(image_np, cmap='gray')  # Display image as grayscale
+    plt.title('Image')
+
+    # Plot the label with the custom color map
+    plt.subplot(1, 2, 2)
+    plt.imshow(label, cmap=cmap, norm=norm)  # Color the label based on defined cmap
+    plt.colorbar(ticks=[0, 1, 2, 3])  # Show the color bar with label values
+    plt.title('Colored Segmentation Mask')
+
+    plt.show()
