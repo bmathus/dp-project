@@ -41,8 +41,8 @@ class Trainer:
 
         # Create model
         # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
-        # self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
-        self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
+        self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
+        # self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup(self, log: Logger):
@@ -96,16 +96,7 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                loss_seg_dice,loss_seg,loss_consist = self.msd_loss(
-                    outputs=outputs,
-                    label_batch=label_batch,
-                    ce_loss=ce_loss,
-                    dice_loss=dice_loss,
-                    consistency_criterion=consistency_criterion,
-                    cfg=cfg
-                )
-
-                # loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                # loss_seg_dice,loss_seg,loss_consist = self.msd_loss(
                 #     outputs=outputs,
                 #     label_batch=label_batch,
                 #     ce_loss=ce_loss,
@@ -113,6 +104,15 @@ class Trainer:
                 #     consistency_criterion=consistency_criterion,
                 #     cfg=cfg
                 # )
+
+                loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                    outputs=outputs,
+                    label_batch=label_batch,
+                    ce_loss=ce_loss,
+                    dice_loss=dice_loss,
+                    consistency_criterion=consistency_criterion,
+                    cfg=cfg
+                )
 
                 # if i == 0:
                 #     return
@@ -336,31 +336,38 @@ class Trainer:
         # Dec 2 output: torch.Size([24, 4, 256, 256])
         # Label: torch.Size([24, 256, 256])
 
-        num_outputs = len(outputs)
-        y_ori = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-        y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-
-        #print("Y:",outputs[0][:cfg.labeled_bs].shape)#
+        # num_outputs = len(outputs)
+        # y_ori = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
+        # y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
 
         loss_seg = 0
         loss_seg_dice = 0 
-        for idx in range(num_outputs):
-            y = outputs[idx][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
-            y_prob = F.softmax(y, dim=1)
-            loss_seg += ce_loss(y, label_batch[:cfg.labeled_bs][:].long())
-            loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
 
-            y_all = outputs[idx]
-            y_prob_all = F.softmax(y_all, dim=1)
-            y_ori[idx] = y_prob_all
-            y_pseudo_label[idx] = sharpening(y_prob_all,cfg)
+        y_d1 = outputs[0][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
+        y_prob = F.softmax(y_d1, dim=1)
+        loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
+        loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+        y_d2 = outputs[1][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
+        y_prob = F.softmax(y_d2, dim=1)
+        loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
+        loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+
+        y_prob_all_d1 = F.softmax(outputs[0], dim=1)
+        y_pseudo_label_d1 = sharpening(y_prob_all_d1,cfg)
+
+        y_prob_all_d2 = F.softmax(outputs[1], dim=1)
+        y_pseudo_label_d2 = sharpening(y_prob_all_d2,cfg)
         
         loss_consist = 0
-        for i in range(num_outputs):
-            for j in range(num_outputs):
-                if i != j:
-                    #print(f"i: {i} j: {j}")
-                    loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
+        loss_consist += (consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1))
+
+        # for i in range(num_outputs):
+        #     for j in range(num_outputs):
+        #         if i != j:
+        #             #print(f"i: {i} j: {j}")
+        #             loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
         
         return loss_seg_dice,loss_seg,loss_consist
     
