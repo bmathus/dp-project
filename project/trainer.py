@@ -131,7 +131,7 @@ class Trainer:
                 run["train/lr"].append(base_lr,step=iter_num)
                 run["train/loss"].append(loss,step=iter_num)
                 run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
-                # run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
+                run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
                 run["train/consistency_loss"].append(loss_consist,step=iter_num)
                 iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist":loss_consist.item()})
 
