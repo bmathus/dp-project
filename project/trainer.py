@@ -41,8 +41,8 @@ class Trainer:
 
         # Create model
         # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
-        self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
-        # self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
+        # self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
+        self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup(self, log: Logger):
@@ -96,16 +96,7 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                # loss_seg_dice,loss_seg,loss_consist = self.msd_loss(
-                #     outputs=outputs,
-                #     label_batch=label_batch,
-                #     ce_loss=ce_loss,
-                #     dice_loss=dice_loss,
-                #     consistency_criterion=consistency_criterion,
-                #     cfg=cfg
-                # )
-
-                loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                loss_seg_dice,loss_seg,loss_consist = self.msd_loss(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
@@ -114,12 +105,21 @@ class Trainer:
                     cfg=cfg
                 )
 
+                # loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                #     outputs=outputs,
+                #     label_batch=label_batch,
+                #     ce_loss=ce_loss,
+                #     dice_loss=dice_loss,
+                #     consistency_criterion=consistency_criterion,
+                #     cfg=cfg
+                # )
+
                 # if i == 0:
                 #     return
                 
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
-                loss = cfg.lamda * (loss_seg_dice +  loss_seg) + 0.1 * loss_consist
+                loss = cfg.lamda * loss_seg_dice + 0.1 * loss_consist
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -380,11 +380,11 @@ class Trainer:
 
         output_d1_main = outputs_d1[0][:cfg.labeled_bs]
         loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+        # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
 
         output_d2_main = outputs_d2[0][:cfg.labeled_bs]
         loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+        # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
 
         loss_consist = 0
         for scale_num in range(4):
