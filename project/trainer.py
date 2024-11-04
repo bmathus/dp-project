@@ -119,7 +119,7 @@ class Trainer:
                 
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//100)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + loss_consist_aux)
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + 0.5 *loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
