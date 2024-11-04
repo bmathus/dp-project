@@ -12,7 +12,7 @@ if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="msdnet-con-main-con-aux-epoch100-35k", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="msdnet-con-main-con-aux-50k", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     p.add_argument('--seed', type=int,  default=1337, help='Random seed')
     p.add_argument('--deterministic',"-dt", type=int,  default=1,help='Whether use deterministic training')
 
-    p.add_argument("--max_iter","-e", type=int, default=35000, help="Number of iterations")
+    p.add_argument("--max_iter","-e", type=int, default=50000, help="Number of iterations")
     p.add_argument("--base_lr","-lr", type=float, default=0.01, help="Segmentation network learning rate")
     p.add_argument('--num_classes', type=int, default=4, help='Output channel of network')
 
