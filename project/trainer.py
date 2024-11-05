@@ -41,8 +41,8 @@ class Trainer:
 
         # Create model
         # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
-        self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
-        # self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
+        # self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
+        self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup(self, log: Logger):
@@ -96,16 +96,7 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                # loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = self.msd_loss(
-                #     outputs=outputs,
-                #     label_batch=label_batch,
-                #     ce_loss=ce_loss,
-                #     dice_loss=dice_loss,
-                #     consistency_criterion=consistency_criterion,
-                #     cfg=cfg
-                # )
-
-                loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = self.msd_loss(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
@@ -114,12 +105,21 @@ class Trainer:
                     cfg=cfg
                 )
 
+                # loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                #     outputs=outputs,
+                #     label_batch=label_batch,
+                #     ce_loss=ce_loss,
+                #     dice_loss=dice_loss,
+                #     consistency_criterion=consistency_criterion,
+                #     cfg=cfg
+                # )
+
                 # if i == 0:
                 #     return
                 
-                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//100)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -131,9 +131,9 @@ class Trainer:
                 run["train/loss"].append(loss,step=iter_num)
                 run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                run["train/consistency_loss"].append(loss_consist,step=iter_num)
-                # run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist_main":loss_consist.item()})
+                run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
+                run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist_main":loss_consist_main.item()})
 
                 # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
@@ -397,16 +397,14 @@ class Trainer:
 
         loss_consist_aux = 0
         for scale_num in range(1,4):
-            outscale_d1_soft = F.softmax(outputs_d1[scale_num], dim=1)
-            outscale_d2_soft = F.softmax(outputs_d2[scale_num], dim=1)
-            outscale_d1_pseudo = sharpening(outscale_d1_soft,cfg)
-            outscale_d2_pseudo = sharpening(outscale_d2_soft,cfg)
-
-            loss_consist_aux += consistency_criterion(outscale_d1_soft,outscale_d2_pseudo) + consistency_criterion(outscale_d2_soft,outscale_d1_pseudo)
+            outscale_d1_soft = F.softmax(outputs_d1[scale_num][cfg.labeled_bs:], dim=1)
+            outscale_d2_soft = F.softmax(outputs_d2[scale_num][cfg.labeled_bs:], dim=1)
+            loss_consist_aux += consistency_criterion(outscale_d1_soft,outscale_d2_soft) 
 
         loss_consist_aux = loss_consist_aux/3
             
         return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
+
 
 
         # pseudolabel sharpening
