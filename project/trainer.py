@@ -78,7 +78,7 @@ class Trainer:
 
         self.model.train()
 
-        optimizer = optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
         ce_loss = CrossEntropyLoss()
         consistency_criterion = mse_loss
         dice_loss = DiceLoss(cfg.num_classes)
@@ -117,9 +117,9 @@ class Trainer:
                 # if i == 0:
                 #     return
                 
-                consistency_weight = get_current_consistency_weight(cfg,iter_num//100)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + 0.5 *loss_consist_aux)
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -395,12 +395,14 @@ class Trainer:
         outmain_d2_pseudo = sharpening(outmain_d2_soft,cfg)
         loss_consist_main += consistency_criterion(outmain_d1_soft,outmain_d2_pseudo) + consistency_criterion(outmain_d2_soft,outmain_d1_pseudo)
 
-
         loss_consist_aux = 0
         for scale_num in range(1,4):
             outscale_d1_soft = F.softmax(outputs_d1[scale_num], dim=1)
             outscale_d2_soft = F.softmax(outputs_d2[scale_num], dim=1)
-            loss_consist_aux += consistency_criterion(outscale_d1_soft,outscale_d2_soft) 
+            outscale_d1_pseudo = sharpening(outscale_d1_soft,cfg)
+            outscale_d2_pseudo = sharpening(outscale_d2_soft,cfg)
+
+            loss_consist_aux += consistency_criterion(outscale_d1_soft,outscale_d2_pseudo) + consistency_criterion(outscale_d2_soft,outscale_d1_pseudo)
 
         loss_consist_aux = loss_consist_aux/3
             

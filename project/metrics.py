@@ -61,7 +61,7 @@ def inference_mtnet(model,input):
         output = output[0]
     return output
 
-def test_single_volume_ds(image, label, model,device: str,cfg):
+def test_single_volume_ds(image, label, model,device,cfg):
     if cfg.network == "urpc":
         inference = inference_urpc
     elif cfg.network == "msdnet":
