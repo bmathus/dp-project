@@ -41,8 +41,8 @@ class Trainer:
 
         # Create model
         # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
-        # self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
-        self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
+        self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
+        # self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup(self, log: Logger):
@@ -96,16 +96,7 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = self.msd_loss(
-                    outputs=outputs,
-                    label_batch=label_batch,
-                    ce_loss=ce_loss,
-                    dice_loss=dice_loss,
-                    consistency_criterion=consistency_criterion,
-                    cfg=cfg
-                )
-
-                # loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                # loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = self.msd_loss(
                 #     outputs=outputs,
                 #     label_batch=label_batch,
                 #     ce_loss=ce_loss,
@@ -114,12 +105,21 @@ class Trainer:
                 #     cfg=cfg
                 # )
 
+                loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                    outputs=outputs,
+                    label_batch=label_batch,
+                    ce_loss=ce_loss,
+                    dice_loss=dice_loss,
+                    consistency_criterion=consistency_criterion,
+                    cfg=cfg
+                )
+
                 # if i == 0:
                 #     return
                 
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + loss_consist_aux)
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -131,9 +131,9 @@ class Trainer:
                 run["train/loss"].append(loss,step=iter_num)
                 run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
-                run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist_main":loss_consist_main.item()})
+                run["train/consistency_loss"].append(loss_consist,step=iter_num)
+                # run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist_main":loss_consist.item()})
 
                 # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
@@ -345,12 +345,12 @@ class Trainer:
 
         y_d1 = outputs[0][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
         y_prob = F.softmax(y_d1, dim=1)
-        loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
+        # loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
         loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
 
         y_d2 = outputs[1][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
         y_prob = F.softmax(y_d2, dim=1)
-        loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
+        # loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
         loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
 
 
@@ -361,7 +361,7 @@ class Trainer:
         y_pseudo_label_d2 = sharpening(y_prob_all_d2,cfg)
         
         loss_consist = 0
-        loss_consist += (consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1))
+        loss_consist += consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1)
 
         # for i in range(num_outputs):
         #     for j in range(num_outputs):
