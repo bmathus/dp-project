@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
-from project.models import unet_mtnet,unet_hybrid
+from project.models import unet_mtnet,unet_hybrid,unet_urpc
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -40,13 +40,19 @@ class Trainer:
         print("| Setting up device:",self.device)
 
         # Create model
-        # self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=cfg.num_classes)
-        # self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=cfg.num_classes)
-        self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=cfg.num_classes)
-        self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
+        self.network_factory()
 
     def setup(self, log: Logger):
         self.log = log
+
+    def network_factory(self):
+        if self.cfg.network == "urpc":
+            self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=self.cfg.num_classes)
+        elif self.cfg.network == "mtnet":
+            self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=self.cfg.num_classes)
+        elif self.cfg.network == "msdnet":
+            self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=self.cfg.num_classes)
+        self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
     def setup_dataloaders(self,cfg):
         print("| Setting up dataloaders:")
@@ -405,10 +411,8 @@ class Trainer:
             
         return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
 
-        # pseudolabel sharpening
-    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,kd_loss,cfg):
+    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion,cfg):
         outputs_d1,outputs_d2 = outputs
-
         # Sup
         loss_seg_dice = 0
         loss_seg_ce = 0
@@ -421,10 +425,12 @@ class Trainer:
 
         #Unsup
         cross_loss = 0
-        cross_loss += kd_loss(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
-        cross_loss += kd_loss(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
+        cross_loss += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
+        cross_loss += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
 
+        return loss_seg_dice,loss_seg_ce,cross_loss
 
+        
 
 
 
