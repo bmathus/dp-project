@@ -119,7 +119,7 @@ class Trainer:
                 
                 consistency_weight = get_current_consistency_weight(cfg,iter_num//100)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * (loss_consist_main + loss_consist_aux)
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist_main + consistency_weight * loss_consist_aux
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -405,9 +405,27 @@ class Trainer:
             
         return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
 
-
-
         # pseudolabel sharpening
+    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,kd_loss,cfg):
+        outputs_d1,outputs_d2 = outputs
+
+        # Sup
+        loss_seg_dice = 0
+        loss_seg_ce = 0
+        output_d1_main = outputs_d1[0][:cfg.labeled_bs]
+        loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+        # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+        output_d2_main = outputs_d2[0][:cfg.labeled_bs]
+        loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+        # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+
+        #Unsup
+        cross_loss = 0
+        cross_loss += kd_loss(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
+        cross_loss += kd_loss(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
+
+
+
 
 
 
@@ -421,6 +439,6 @@ class Trainer:
 
         
 
-        pass
+
 
 
