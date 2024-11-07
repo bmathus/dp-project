@@ -435,11 +435,11 @@ class Trainer:
         # print("outputs_d2[0] reshaped:", outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
         loss_consist += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
         loss_consist += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-        # for scale_num in range(1,4):
-        #     loss_consist += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-        #     loss_consist += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        for scale_num in range(1,4):
+            loss_consist += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+            loss_consist += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
 
-        # loss_consist = loss_consist/4
+        loss_consist = loss_consist/4
 
         return loss_seg_dice,loss_seg_ce,loss_consist
 
