@@ -7,7 +7,7 @@ from tqdm import tqdm
 from project.logging import Logger
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device,sharpening,get_current_consistency_weight
-from project.metrics import DiceLoss,mse_loss,test_single_volume_ds
+from project.metrics import DiceLoss,mse_loss,test_single_volume_ds,KDLoss
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -86,7 +86,7 @@ class Trainer:
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
         ce_loss = CrossEntropyLoss()
-        consistency_criterion = mse_loss
+        consistency_criterion = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 
         self.log.on_training_start()
@@ -94,7 +94,7 @@ class Trainer:
         iter_num = 0
         best_performance = 0.0
         iterator = tqdm(range(max_epoch), desc="| Training:")
-        for _ in iterator:
+        for epoch in iterator:
             for _, sampled_batch in enumerate(trainloader):
                 # Data to device
                 volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
@@ -102,7 +102,7 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = self.msd_loss(
+                loss_seg_dice,loss_seg_ce,loss_consist = self.msd_loss_kd(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
@@ -119,13 +119,13 @@ class Trainer:
                 #     consistency_criterion=consistency_criterion,
                 #     cfg=cfg
                 # )
-
-                # if i == 0:
-                #     return
                 
-                consistency_weight = get_current_consistency_weight(cfg,iter_num//100)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist_main + consistency_weight * loss_consist_aux
+                # if epoch < 5:
+                #     loss_consist = torch.tensor((0,)).to(self.device)
+
+                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -137,9 +137,10 @@ class Trainer:
                 run["train/loss"].append(loss,step=iter_num)
                 run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
-                run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
-                run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist_main":loss_consist_main.item()})
+                run["train/consistency_loss"].append(loss_consist,step=iter_num)
+                # run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
+                # run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist":loss_consist.item()})
 
                 # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
@@ -423,12 +424,19 @@ class Trainer:
         loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
         # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
 
-        #Unsup
-        cross_loss = 0
-        cross_loss += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
-        cross_loss += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 2),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 2))
+        #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
+        #outputs_d1[0] torch.Size([24, 4, 256, 256])
+        #outputs_d1[0].permute(0, 2, 3, 1) torch.Size([24, 256, 256, 4])
+        #outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)
 
-        return loss_seg_dice,loss_seg_ce,cross_loss
+        #Unsup
+        loss_consist = 0
+        # print("outputs_d1[0] reshaped:", outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
+        # print("outputs_d2[0] reshaped:", outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
+        loss_consist += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+
+        return loss_seg_dice,loss_seg_ce,loss_consist
 
         
 
