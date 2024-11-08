@@ -120,7 +120,7 @@ class Trainer:
                 #     cfg=cfg
                 # )
                 
-                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//75)
 
                 if epoch < 90:
                     loss_consist = torch.tensor((0,)).to(self.device)
