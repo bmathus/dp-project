@@ -125,7 +125,7 @@ class Trainer:
                 if epoch < 90:
                     loss_consist = torch.tensor((0,)).to(self.device)
 
-                loss = cfg.lamda * loss_seg_dice + consistency_weight * loss_consist
+                loss = cfg.lamda * loss_seg_dice + 0.1 * loss_consist
 
                 optimizer.zero_grad()
                 loss.backward()
