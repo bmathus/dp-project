@@ -7,7 +7,7 @@ from tqdm import tqdm
 from project.logging import Logger
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device,sharpening,get_current_consistency_weight
-from project.metrics import DiceLoss,mse_loss,test_single_volume_ds,KDLoss
+from project.metrics import DiceLoss,mse_loss,test_single_volume_ds,KDLoss, entropy_loss
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -86,7 +86,7 @@ class Trainer:
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
         ce_loss = CrossEntropyLoss()
-        kd = KDLoss(T=10)
+        consistency_criterion = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 
         self.log.on_training_start()
@@ -102,12 +102,12 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux = self.msd_loss_kd(
+                loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux,en_loss = self.msd_loss_kd(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
                     dice_loss=dice_loss,
-                    kd = kd,
+                    consistency_criterion= consistency_criterion,
                     cfg=cfg
                 )
 
@@ -125,8 +125,9 @@ class Trainer:
                 if epoch < 90:
                     loss_consist_main = torch.tensor((0,)).to(self.device)
                     loss_consist_aux = torch.tensor((0,)).to(self.device)
+                    en_loss = torch.tensor((0,)).to(self.device)
 
-                loss = cfg.lamda * loss_seg_dice + 0.1 * loss_consist_main + consistency_weight * loss_consist_aux
+                loss = cfg.lamda * loss_seg_dice + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -141,6 +142,7 @@ class Trainer:
                 # run["train/consistency_loss"].append(loss_consist,step=iter_num)
                 run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
                 run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
+                run["train/en_loss"].append(en_loss,step=iter_num)
                 iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist":loss_consist_main.item()})
 
                 # Validation
@@ -413,7 +415,7 @@ class Trainer:
             
         return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
 
-    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,kd,cfg):
+    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion ,cfg):
         outputs_d1,outputs_d2 = outputs
         # Sup
         loss_seg_dice = 0
@@ -430,25 +432,23 @@ class Trainer:
         #outputs_d1[0].permute(0, 2, 3, 1) torch.Size([24, 256, 256, 4])
         #outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)
 
+        #Uncertainty min
+        outputs_avg_main_soft = (F.softmax(outputs_d1[0], dim=1) + F.softmax(outputs_d2[0], dim=1)) / 2
+        en_loss = entropy_loss(outputs_avg_main_soft,C=4)
+        
         #Unsup
         loss_consist_main = 0
-        # print("outputs_d1[0] reshaped:", outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
-        # print("outputs_d2[0] reshaped:", outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
-        loss_consist_main += kd(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-        loss_consist_main += kd(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist_main += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist_main += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
 
         loss_consist_aux = 0
         for scale_num in range(1,4):
-            outscale_d1_soft = F.softmax(outputs_d1[scale_num], dim=1)
-            outscale_d2_soft = F.softmax(outputs_d2[scale_num], dim=1)
-            loss_consist_aux += mse_loss(outscale_d1_soft,outscale_d2_soft) 
-
-            # loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-            # loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+            loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+            loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
 
         loss_consist_aux = loss_consist_aux/3
 
-        return loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux
+        return loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux, en_loss
 
         
 

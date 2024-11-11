@@ -62,6 +62,14 @@ class KDLoss(nn.Module):
         return loss
 
 
+def entropy_loss(p, C=4):
+    # p N*C*W*H*D
+    y1 = -1*torch.sum(p*torch.log(p+1e-6), dim=1) / \
+        torch.tensor(np.log(C)).cuda()
+    ent = torch.mean(y1)
+
+    return ent
+
 def mse_loss(input1, input2):
     return torch.mean((input1 - input2)**2)
 
