@@ -86,7 +86,7 @@ class Trainer:
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
         ce_loss = CrossEntropyLoss()
-        consistency_criterion = KDLoss(T=10)
+        kd = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 
         self.log.on_training_start()
@@ -107,7 +107,7 @@ class Trainer:
                     label_batch=label_batch,
                     ce_loss=ce_loss,
                     dice_loss=dice_loss,
-                    consistency_criterion=consistency_criterion,
+                    kd = kd,
                     cfg=cfg
                 )
 
@@ -120,7 +120,7 @@ class Trainer:
                 #     cfg=cfg
                 # )
                 
-                consistency_weight = get_current_consistency_weight(cfg,iter_num//250)
+                consistency_weight = get_current_consistency_weight(cfg,iter_num//150)
 
                 if epoch < 90:
                     loss_consist_main = torch.tensor((0,)).to(self.device)
@@ -413,7 +413,7 @@ class Trainer:
             
         return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
 
-    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion,cfg):
+    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,kd,cfg):
         outputs_d1,outputs_d2 = outputs
         # Sup
         loss_seg_dice = 0
@@ -434,13 +434,17 @@ class Trainer:
         loss_consist_main = 0
         # print("outputs_d1[0] reshaped:", outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
         # print("outputs_d2[0] reshaped:", outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4).shape)
-        loss_consist_main += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-        loss_consist_main += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist_main += kd(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist_main += kd(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
 
         loss_consist_aux = 0
         for scale_num in range(1,4):
-            loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-            loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+            outscale_d1_soft = F.softmax(outputs_d1[scale_num], dim=1)
+            outscale_d2_soft = F.softmax(outputs_d2[scale_num], dim=1)
+            loss_consist_aux += mse_loss(outscale_d1_soft,outscale_d2_soft) 
+
+            # loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+            # loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
 
         loss_consist_aux = loss_consist_aux/3
 
