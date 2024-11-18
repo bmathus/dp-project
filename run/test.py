@@ -73,9 +73,9 @@ def test_single_volume(case, net, FLAGS,device):
     prd_itk.SetSpacing((1, 1, 10))
     lab_itk = sitk.GetImageFromArray(label.astype(np.float32)) # type: ignore
     lab_itk.SetSpacing((1, 1, 10))
-    sitk.WriteImage(prd_itk, FLAGS.run_path + case + "_pred.nii.gz")
-    sitk.WriteImage(img_itk, FLAGS.run_path + case + "_img.nii.gz")
-    sitk.WriteImage(lab_itk, FLAGS.run_path + case + "_gt.nii.gz")
+    sitk.WriteImage(prd_itk, FLAGS.run_path / f"{case}_pred.nii.gz")
+    sitk.WriteImage(img_itk, FLAGS.run_path / f"{case}_img.nii.gz")
+    sitk.WriteImage(lab_itk, FLAGS.run_path / f"{case}_gt.nii.gz")
     return first_metric, second_metric, third_metric
 
 
