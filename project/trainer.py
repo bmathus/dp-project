@@ -127,7 +127,7 @@ class Trainer:
                     loss_consist_aux = torch.tensor((0,)).to(self.device)
                     en_loss = torch.tensor((0,)).to(self.device)
 
-                loss = cfg.lamda * loss_seg_dice + (0.1 * loss_consist_main) + (consistency_weight * en_loss) + (consistency_weight * loss_consist_aux)
+                loss = cfg.lamda * loss_seg_dice + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -434,7 +434,7 @@ class Trainer:
 
         #Uncertainty min
         outputs_avg_main_soft = (F.softmax(outputs_d1[0], dim=1) + F.softmax(outputs_d2[0], dim=1)) / 2
-        en_loss = entropy_loss(outputs_avg_main_soft,C=4)
+        en_loss = entropy_loss(outputs_avg_main_soft,self.device,C=4)
         
         #Unsup
         loss_consist_main = 0

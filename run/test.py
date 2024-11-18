@@ -3,6 +3,7 @@ from medpy import metric
 from scipy.ndimage import zoom
 from project.trainer import decide_device
 from project.models import unet_mtnet,unet_urpc,unet_hybrid
+import SimpleITK as sitk
 import os
 import h5py
 import numpy as np
@@ -66,15 +67,15 @@ def test_single_volume(case, net, FLAGS,device):
     else:
         third_metric = calculate_metric_percase(prediction == 3, label == 3)
 
-    # img_itk = sitk.GetImageFromArray(image.astype(np.float32))
-    # img_itk.SetSpacing((1, 1, 10))
-    # prd_itk = sitk.GetImageFromArray(prediction.astype(np.float32))
-    # prd_itk.SetSpacing((1, 1, 10))
-    # lab_itk = sitk.GetImageFromArray(label.astype(np.float32))
-    # lab_itk.SetSpacing((1, 1, 10))
-    # sitk.WriteImage(prd_itk, test_save_path + case + "_pred.nii.gz")
-    # sitk.WriteImage(img_itk, test_save_path + case + "_img.nii.gz")
-    # sitk.WriteImage(lab_itk, test_save_path + case + "_gt.nii.gz")
+    img_itk = sitk.GetImageFromArray(image.astype(np.float32)) # type: ignore
+    img_itk.SetSpacing((1, 1, 10))
+    prd_itk = sitk.GetImageFromArray(prediction.astype(np.float32))
+    prd_itk.SetSpacing((1, 1, 10))
+    lab_itk = sitk.GetImageFromArray(label.astype(np.float32)) # type: ignore
+    lab_itk.SetSpacing((1, 1, 10))
+    sitk.WriteImage(prd_itk, FLAGS.run_path + case + "_pred.nii.gz")
+    sitk.WriteImage(img_itk, FLAGS.run_path + case + "_img.nii.gz")
+    sitk.WriteImage(lab_itk, FLAGS.run_path + case + "_gt.nii.gz")
     return first_metric, second_metric, third_metric
 
 
@@ -100,7 +101,7 @@ def Inference(FLAGS):
         print("> Testing model: MCNet2d_v1")
     elif FLAGS.network == "msdnet":
         net = unet_hybrid.UNet_MSD(in_chns=1,class_num=FLAGS.num_classes)
-        print("> Testing model: MCDNet")
+        print("> Testing model: MSDNet")
 
     net = net.to(device) 
 

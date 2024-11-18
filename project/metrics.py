@@ -62,10 +62,10 @@ class KDLoss(nn.Module):
         return loss
 
 
-def entropy_loss(p, C=4):
+def entropy_loss(p,device, C=4):
     # p N*C*W*H*D
     y1 = -1*torch.sum(p*torch.log(p+1e-6), dim=1) / \
-        torch.tensor(np.log(C)).cuda()
+        torch.tensor(np.log(C)).to(device)
     ent = torch.mean(y1)
 
     return ent
