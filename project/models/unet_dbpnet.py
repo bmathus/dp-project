@@ -1,8 +1,8 @@
 import torch.nn as nn
 import torch
 from project.models.unet_urpc import FeatureDropout,FeatureNoise,Dropout
-from project.models.unet_mtnet import Encoder
-from project.models.unet_mtnet import UpBlock
+from project.models.unet_mcnet import Encoder
+from project.models.unet_mcnet import UpBlock
 
 
 class DecoderMS(nn.Module):
@@ -54,9 +54,9 @@ class DecoderMS(nn.Module):
         return dp0_out_seg, dp1_out_seg, dp2_out_seg, dp3_out_seg
 
 
-class MSDNet(nn.Module):
+class DBPNet(nn.Module):
     def __init__(self, in_chns, class_num):
-        super(MSDNet, self).__init__()
+        super(DBPNet, self).__init__()
 
         params1 = {'in_chns': in_chns,
                   'feature_chns': [16, 32, 64, 128, 256],
@@ -86,9 +86,9 @@ class MSDNet(nn.Module):
         return [d1_out1, d1_out2, d1_out3, d1_out4], [d2_out1, d2_out2, d2_out3, d2_out4]
     
 
-class UNet_MSD(nn.Module):
+class UNet_DBP(nn.Module):
     def __init__(self, in_chns, class_num):
-        super(UNet_MSD, self).__init__()
+        super(UNet_DBP, self).__init__()
 
         params1 = {'in_chns': in_chns,
                 'feature_chns': [16, 32, 64, 128, 256],

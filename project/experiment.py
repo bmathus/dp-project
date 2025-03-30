@@ -1,6 +1,7 @@
 from pathlib import Path
 from project.trainer import Trainer
 from project.logging import Logger
+from run.train import Config
 from argparse import Namespace
 from run.test import Inference
 import yaml
@@ -9,7 +10,7 @@ import uuid
 
 
 class Experiment:
-    def __init__(self, cfg):
+    def __init__(self, cfg: Config):
         self.cfg = cfg
 
         self.resuming_run = False
@@ -30,7 +31,7 @@ class Experiment:
             print(f" > Created experiment : {self.cfg.name}/{self.cfg.ver}")
 
         # Create trainer
-        self.trainer = Trainer(self.cfg, self.experiment_path, self.resuming_run)
+        self.trainer = Trainer(self.cfg, self.resuming_run)
 
     def start_experiment(self):
         # Initialize run
@@ -48,7 +49,7 @@ class Experiment:
         if self.cfg.network == "urpc":
             self.trainer.fit_urpc(self.experiment_path, self.run)
         else:
-            self.trainer.fit_mtnet(self.experiment_path,self.run)
+            self.trainer.fit_consistency_learning(self.experiment_path,self.run)
 
         # Setup test config
         test_cfg = Namespace(

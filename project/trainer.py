@@ -5,21 +5,23 @@ import numpy as np
 import random
 from tqdm import tqdm
 from project.logging import Logger
+from run.train import Config
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
-from project.utils import worker_init_fn,decide_device,sharpening,get_current_consistency_weight
-from project.metrics import DiceLoss,mse_loss,test_single_volume_ds,KDLoss, entropy_loss
+from project.utils import worker_init_fn,decide_device, get_current_consistency_weight
+from project.metrics import mse_loss, test_single_volume_ds, KDLoss
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
-from project.models import unet_mtnet,unet_hybrid,unet_urpc
+from project.models import unet_dbpnet, unet_mcnet,unet_urpc
+from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, mtnet_loss
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
 
 class Trainer:
-    def __init__(self, cfg, experiment_path ,resuming_run: bool):
+    def __init__(self, cfg: Config ,resuming_run: bool):
         #Setup torch seed and device
         self.cfg = cfg
         self.start_epoch = 0
@@ -48,13 +50,13 @@ class Trainer:
     def network_factory(self):
         if self.cfg.network == "urpc":
             self.model: nn.Module = unet_urpc.UNet_URPC(in_chns=1,class_num=self.cfg.num_classes)
-        elif self.cfg.network == "mtnet":
-            self.model: nn.Module = unet_mtnet.MCNet2d_v1(in_chns=1,class_num=self.cfg.num_classes)
-        elif self.cfg.network == "msdnet":
-            self.model: nn.Module = unet_hybrid.MSDNet(in_chns=1,class_num=self.cfg.num_classes)
+        elif self.cfg.network == "mcnet":
+            self.model: nn.Module = unet_mcnet.MCNet2d_v1(in_chns=1,class_num=self.cfg.num_classes)
+        elif self.cfg.network == "dbpnet":
+            self.model: nn.Module = unet_dbpnet.DBPNet(in_chns=1,class_num=self.cfg.num_classes)
         self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
 
-    def setup_dataloaders(self,cfg):
+    def setup_dataloaders(self,cfg: Config):
         print("| Setting up dataloaders:")
         db_train = BaseDataSets(base_dir=cfg.data_path, split="train", num=None, transform=transforms.Compose([
             RandomGenerator([cfg.patch_size, cfg.patch_size])
@@ -76,11 +78,11 @@ class Trainer:
 
         return trainloader,valloader,len(db_train),len(db_val)
 
-    def fit_mtnet(self,experiment_path: Path,run: Run):
+    def fit_consistency_learning(self,experiment_path: Path,run: Run):
         base_lr = self.cfg.base_lr
         cfg = self.cfg
 
-        trainloader,valloader,total_samples,total_val_samples = self.setup_dataloaders(cfg)
+        trainloader, valloader, total_samples, total_val_samples = self.setup_dataloaders(cfg)
 
         self.model.train()
 
@@ -102,16 +104,17 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
 
-                loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux,en_loss = self.msd_loss_kd(
+                loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux, en_loss = CPCR_loss_kd(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
                     dice_loss=dice_loss,
                     consistency_criterion= consistency_criterion,
-                    cfg=cfg
+                    cfg=cfg,
+                    device=self.device
                 )
 
-                # loss_seg_dice,loss_seg,loss_consist = self.mtnet_loss(
+                # loss_seg_dice,loss_seg,loss_consist = mtnet_loss(
                 #     outputs=outputs,
                 #     label_batch=label_batch,
                 #     ce_loss=ce_loss,
@@ -206,7 +209,7 @@ class Trainer:
                 outputs, outputs_aux1, outputs_aux2, outputs_aux3 = self.model(volume_batch)
 
                 # Calculate loss terms
-                supervised_loss,loss_dice,loss_ce,consistency_loss = self.urpc_loss(
+                supervised_loss,loss_dice,loss_ce,consistency_loss = urpc_loss(
                     cfg,
                     (outputs, outputs_aux1, outputs_aux2, outputs_aux3),
                     label_batch,
@@ -274,7 +277,7 @@ class Trainer:
                 
         self.log.on_training_stop()
 
-    def validation(self,valloader,total_val_samples,iter_num, cfg, run: Run):
+    def validation(self,valloader,total_val_samples,iter_num, cfg: Config, run: Run):
         metric_list = 0.0
         for _, sampled_batch in enumerate(valloader):
             metric_i = test_single_volume_ds(sampled_batch["image"], sampled_batch["label"], self.model,self.device,cfg)
@@ -287,184 +290,5 @@ class Trainer:
         run["val/mean_hd95"].append(mean_hd95,step=iter_num)
         return performance
 
-    def urpc_loss(self,cfg, multi_scale_outputs, label_batch, dice_loss, ce_loss, kl_distance):
-        outputs, outputs_aux1, outputs_aux2, outputs_aux3 = multi_scale_outputs
-
-        #Outputs softmax
-        outputs_soft = torch.softmax(outputs, dim=1)
-        outputs_aux1_soft = torch.softmax(outputs_aux1, dim=1)
-        outputs_aux2_soft = torch.softmax(outputs_aux2, dim=1)
-        outputs_aux3_soft = torch.softmax(outputs_aux3, dim=1)
-
-        #SUP CE loss (outputs <-> labels)
-        loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
-        loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-        loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-        loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
-
-        #SUP Dice loss (outputs_soft <-> labels)
-        loss_dice = dice_loss(outputs_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
-        loss_dice_aux1 = dice_loss(outputs_aux1_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
-        loss_dice_aux2 = dice_loss(outputs_aux2_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
-        loss_dice_aux3 = dice_loss(outputs_aux3_soft[:cfg.labeled_bs], label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-        #SUP loss
-        supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
-
-        preds = (outputs_soft+outputs_aux1_soft +outputs_aux2_soft+outputs_aux3_soft)/4 #priemer pravdep predickie všetkých škal (labeled aj unlabeled)
-        
-        #weight = exp(KL (outputs_soft <-> preds_soft_avg))
-        variance_main = torch.sum(kl_distance(torch.log(outputs_soft[cfg.labeled_bs:]), preds[cfg.labeled_bs:]), dim=1, keepdim=True)
-        exp_variance_main = torch.exp(-variance_main)
-        variance_aux1 = torch.sum(kl_distance(torch.log(outputs_aux1_soft[cfg.labeled_bs:]), preds[cfg.labeled_bs:]), dim=1, keepdim=True)
-        exp_variance_aux1 = torch.exp(-variance_aux1)
-        variance_aux2 = torch.sum(kl_distance(torch.log(outputs_aux2_soft[cfg.labeled_bs:]), preds[cfg.labeled_bs:]), dim=1, keepdim=True)
-        exp_variance_aux2 = torch.exp(-variance_aux2)
-        variance_aux3 = torch.sum(kl_distance(torch.log(outputs_aux3_soft[cfg.labeled_bs:]), preds[cfg.labeled_bs:]), dim=1, keepdim=True)
-        exp_variance_aux3 = torch.exp(-variance_aux3)
-
-        consistency_dist_main = (preds[cfg.labeled_bs:] - outputs_soft[cfg.labeled_bs:]) ** 2
-        consistency_loss_main = torch.mean(consistency_dist_main * exp_variance_main) / (torch.mean(exp_variance_main) + 1e-8) 
-
-        consistency_dist_aux1 = (preds[cfg.labeled_bs:] - outputs_aux1_soft[cfg.labeled_bs:]) ** 2
-        consistency_loss_aux1 = torch.mean(consistency_dist_aux1 * exp_variance_aux1) / (torch.mean(exp_variance_aux1) + 1e-8)
-
-        consistency_dist_aux2 = (preds[cfg.labeled_bs:] - outputs_aux2_soft[cfg.labeled_bs:]) ** 2
-        consistency_loss_aux2 = torch.mean(consistency_dist_aux2 * exp_variance_aux2) / (torch.mean(exp_variance_aux2) + 1e-8) 
-
-        consistency_dist_aux3 = (preds[cfg.labeled_bs:] - outputs_aux3_soft[cfg.labeled_bs:]) ** 2
-        consistency_loss_aux3 = torch.mean(consistency_dist_aux3 * exp_variance_aux3) / (torch.mean(exp_variance_aux3) + 1e-8) 
-
-        consistency_loss = (consistency_loss_main + consistency_loss_aux1 + consistency_loss_aux2 + consistency_loss_aux3) / 4
-
-        # uncertainty_min = (torch.mean(variance_main) + torch.mean(variance_aux1) + torch.mean(variance_aux2) + torch.mean(variance_aux3)) / 4
-
-        return supervised_loss,loss_dice,loss_ce,consistency_loss,#uncertainty_min
-
-    def mtnet_loss(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion,cfg):
-        # Dec 1 output: torch.Size([24, 4, 256, 256])
-        # Dec 2 output: torch.Size([24, 4, 256, 256])
-        # Label: torch.Size([24, 256, 256])
-
-        # num_outputs = len(outputs)
-        # y_ori = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-        # y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-
-        loss_seg = 0
-        loss_seg_dice = 0 
-
-        y_d1 = outputs[0][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
-        y_prob = F.softmax(y_d1, dim=1)
-        # loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
-        loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-        y_d2 = outputs[1][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
-        y_prob = F.softmax(y_d2, dim=1)
-        # loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
-        loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-
-        y_prob_all_d1 = F.softmax(outputs[0], dim=1)
-        y_pseudo_label_d1 = sharpening(y_prob_all_d1,cfg)
-
-        y_prob_all_d2 = F.softmax(outputs[1], dim=1)
-        y_pseudo_label_d2 = sharpening(y_prob_all_d2,cfg)
-        
-        loss_consist = 0
-        loss_consist += consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1)
-
-        # for i in range(num_outputs):
-        #     for j in range(num_outputs):
-        #         if i != j:
-        #             #print(f"i: {i} j: {j}")
-        #             loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
-        
-        return loss_seg_dice,loss_seg,loss_consist
     
-    def msd_loss(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion,cfg):
-        outputs_d1,outputs_d2 = outputs
-
-        # Sup
-        loss_seg_dice = 0
-        loss_seg_ce = 0
-
-        output_d1_main = outputs_d1[0][:cfg.labeled_bs]
-        loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
-
-        output_d2_main = outputs_d2[0][:cfg.labeled_bs]
-        loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
-        
-        # Unsup
-        loss_consist_main = 0
-        outmain_d1_soft = F.softmax(outputs_d1[0], dim=1)
-        outmain_d2_soft = F.softmax(outputs_d2[0], dim=1)
-
-        outmain_d1_pseudo = sharpening(outmain_d1_soft,cfg)
-        outmain_d2_pseudo = sharpening(outmain_d2_soft,cfg)
-        loss_consist_main += consistency_criterion(outmain_d1_soft,outmain_d2_pseudo) + consistency_criterion(outmain_d2_soft,outmain_d1_pseudo)
-
-        loss_consist_aux = 0
-        for scale_num in range(1,4):
-            outscale_d1_soft = F.softmax(outputs_d1[scale_num][cfg.labeled_bs:], dim=1)
-            outscale_d2_soft = F.softmax(outputs_d2[scale_num][cfg.labeled_bs:], dim=1)
-            loss_consist_aux += consistency_criterion(outscale_d1_soft,outscale_d2_soft) 
-
-        loss_consist_aux = loss_consist_aux/3
-            
-        return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
-
-    def msd_loss_kd(self,outputs,label_batch,ce_loss,dice_loss,consistency_criterion ,cfg):
-        outputs_d1,outputs_d2 = outputs
-        # Sup
-        loss_seg_dice = 0
-        loss_seg_ce = 0
-        output_d1_main = outputs_d1[0][:cfg.labeled_bs]
-        loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
-        output_d2_main = outputs_d2[0][:cfg.labeled_bs]
-        loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
-
-        #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
-        #outputs_d1[0] torch.Size([24, 4, 256, 256])
-        #outputs_d1[0].permute(0, 2, 3, 1) torch.Size([24, 256, 256, 4])
-        #outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)
-
-        #Uncertainty min
-        outputs_avg_main_soft = (F.softmax(outputs_d1[0], dim=1) + F.softmax(outputs_d2[0], dim=1)) / 2
-        en_loss = entropy_loss(outputs_avg_main_soft,self.device,C=4)
-        
-        #Unsup
-        loss_consist_main = 0
-        loss_consist_main += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-        loss_consist_main += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-
-        loss_consist_aux = 0
-        for scale_num in range(1,4):
-            loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-            loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
-
-        loss_consist_aux = loss_consist_aux/3
-
-        return loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux, en_loss
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
 

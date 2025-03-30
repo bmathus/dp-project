@@ -2,7 +2,7 @@
 from medpy import metric
 from scipy.ndimage import zoom
 from project.trainer import decide_device
-from project.models import unet_mtnet,unet_urpc,unet_hybrid
+from project.models import unet_dbpnet, unet_mcnet,unet_urpc
 import SimpleITK as sitk
 import os
 import h5py
@@ -11,7 +11,6 @@ import torch
 from tqdm import tqdm
 
 # parser = argparse.ArgumentParser()
-
 # parser.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
 # parser.add_argument("--run_path", "-r", type=str, default="", help="Path to run dir")
 # parser.add_argument('--num_classes', type=int,  default=4,help='Output channel of network')
@@ -96,12 +95,12 @@ def Inference(FLAGS):
     if FLAGS.network == "urpc":
         net = unet_urpc.UNet_URPC(in_chns=1,class_num=FLAGS.num_classes)
         print("> Testing model: URPC")
-    elif FLAGS.network == "mtnet":
-        net = unet_mtnet.UNet(in_chns=1,class_num=FLAGS.num_classes)
+    elif FLAGS.network == "mcnet":
+        net = unet_mcnet.UNet(in_chns=1,class_num=FLAGS.num_classes)
         print("> Testing model: MCNet2d_v1")
-    elif FLAGS.network == "msdnet":
-        net = unet_hybrid.UNet_MSD(in_chns=1,class_num=FLAGS.num_classes)
-        print("> Testing model: MSDNet")
+    elif FLAGS.network == "dbpnet":
+        net = unet_dbpnet.UNet_DBP(in_chns=1,class_num=FLAGS.num_classes)
+        print("> Testing model: DBPNet")
 
     net = net.to(device) 
 

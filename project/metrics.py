@@ -4,44 +4,8 @@ import numpy as np
 from torch.nn import functional as F
 from scipy.ndimage import zoom
 from medpy import metric
+from run.train import Config
 
-class DiceLoss(nn.Module):
-    def __init__(self, n_classes):
-        super(DiceLoss, self).__init__()
-        self.n_classes = n_classes
-
-    def _one_hot_encoder(self, input_tensor):
-        tensor_list = []
-        for i in range(self.n_classes):
-            temp_prob = input_tensor == i * torch.ones_like(input_tensor)
-            tensor_list.append(temp_prob)
-        output_tensor = torch.cat(tensor_list, dim=1)
-        return output_tensor.float()
-
-    def _dice_loss(self, score, target):
-        target = target.float()
-        smooth = 1e-5
-        intersect = torch.sum(score * target)
-        y_sum = torch.sum(target * target)
-        z_sum = torch.sum(score * score)
-        loss = (2 * intersect + smooth) / (z_sum + y_sum + smooth)
-        loss = 1 - loss
-        return loss
-
-    def forward(self, inputs, target, weight=None, softmax=False):
-        if softmax:
-            inputs = torch.softmax(inputs, dim=1)
-        target = self._one_hot_encoder(target)
-        if weight is None:
-            weight = [1] * self.n_classes
-        assert inputs.size() == target.size(), 'predict & target shape do not match'
-        class_wise_dice = []
-        loss = 0.0
-        for i in range(0, self.n_classes):
-            dice = self._dice_loss(inputs[:, i], target[:, i])
-            class_wise_dice.append(1.0 - dice.item())
-            loss += dice * weight[i]
-        return loss / self.n_classes
 
 class KDLoss(nn.Module):
     """
@@ -62,18 +26,10 @@ class KDLoss(nn.Module):
         return loss
 
 
-def entropy_loss(p,device, C=4):
-    # p N*C*W*H*D
-    y1 = -1*torch.sum(p*torch.log(p+1e-6), dim=1) / \
-        torch.tensor(np.log(C)).to(device)
-    ent = torch.mean(y1)
-
-    return ent
-
 def mse_loss(input1, input2):
     return torch.mean((input1 - input2)**2)
 
-def inference_msdnet(model,input):
+def inference_dbpnet(model,input):
     output = model(input)
     return output[0][0]
 
@@ -87,11 +43,11 @@ def inference_mtnet(model,input):
         output = output[0]
     return output
 
-def test_single_volume_ds(image, label, model,device,cfg):
+def test_single_volume_ds(image, label, model,device,cfg: Config):
     if cfg.network == "urpc":
         inference = inference_urpc
-    elif cfg.network == "msdnet":
-        inference = inference_msdnet
+    elif cfg.network == "dbpnet":
+        inference = inference_dbpnet
     else:
         inference = inference_mtnet
 
