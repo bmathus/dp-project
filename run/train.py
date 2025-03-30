@@ -1,38 +1,13 @@
-from dataclasses import dataclass
-from typing import Literal
 from argparse import ArgumentParser
 from project.experiment import Experiment  # noqa: E402
+from run.config import Config 
 
-@dataclass
-class Config:
-    name: str
-    ver: str
-    data_path: str
-    base_path: str
-    network: Literal["urpc", "mcnet", "dbpnet"]
-
-    seed: int
-    deterministic: int
-
-    max_iter: int
-    base_lr: float
-    num_classes: int
-
-    batch_size: int
-    labeled_bs: int
-    labeled_num: int
-    patch_size: int
-
-    consistency: float
-    consistency_rampup: float
-    temperature: float
-    lamda: float
 
 if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="debug", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="refactor-db3", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")

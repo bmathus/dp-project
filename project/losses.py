@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from run.train import Config
+from run.config import Config
 from torch.nn.modules.loss import CrossEntropyLoss
 from project.utils import sharpening
 import numpy as np

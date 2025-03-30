@@ -4,7 +4,7 @@ import numpy as np
 from torch.nn import functional as F
 from scipy.ndimage import zoom
 from medpy import metric
-from run.train import Config
+from run.config import Config
 
 
 class KDLoss(nn.Module):

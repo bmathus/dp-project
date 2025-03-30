@@ -1,7 +1,8 @@
 from pathlib import Path
+from dataclasses import asdict
 from project.trainer import Trainer
 from project.logging import Logger
-from run.train import Config
+from run.config import Config
 from argparse import Namespace
 from run.test import Inference
 import yaml
@@ -42,7 +43,7 @@ class Experiment:
             tags=["debug"],
             api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MGM2ZjZlNS0wOGVlLTRiN2UtYjYzNC1mNDJiZmU4MzlhYzIifQ==",
         )
-        self.run["parameters"] = self.cfg
+        self.run["parameters"] = asdict(self.cfg)
 
         # Start training
         self.trainer.setup(log=Logger(self.run))

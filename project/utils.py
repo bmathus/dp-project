@@ -1,7 +1,7 @@
 import random
 import torch
 import numpy as np
-from run.train import Config
+from run.config import Config
 
 def worker_init_fn(worker_id):
     random.seed(1337 + worker_id)

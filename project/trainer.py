@@ -5,7 +5,7 @@ import numpy as np
 import random
 from tqdm import tqdm
 from project.logging import Logger
-from run.train import Config
+from run.config import Config
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device, get_current_consistency_weight
 from project.metrics import mse_loss, test_single_volume_ds, KDLoss
