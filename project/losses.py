@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from run.config import Config
 from torch.nn.modules.loss import CrossEntropyLoss
 from project.utils import sharpening
+from torch.autograd import Variable
 import numpy as np
 
 def entropy_loss(p,device, C=4):
@@ -52,6 +53,41 @@ class DiceLoss(nn.Module):
             loss += dice * weight[i]
         return loss / self.n_classes
 
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2, alpha=None, size_average=True):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        if isinstance(alpha, (float, int)):
+            self.alpha = torch.Tensor([alpha, 1-alpha])
+        if isinstance(alpha, list):
+            self.alpha = torch.Tensor(alpha)
+        self.size_average = size_average
+
+    def forward(self, input, target):
+        if input.dim() > 2:
+            # N,C,H,W => N,C,H*W
+            input = input.view(input.size(0), input.size(1), -1)
+            input = input.transpose(1, 2)    # N,C,H*W => N,H*W,C
+            input = input.contiguous().view(-1, input.size(2))   # N,H*W,C => N*H*W,C
+        target = target.view(-1, 1)
+
+        logpt = F.log_softmax(input, dim=1)
+        logpt = logpt.gather(1, target)
+        logpt = logpt.view(-1)
+        pt = Variable(logpt.data.exp())
+
+        if self.alpha is not None:
+            if self.alpha.type() != input.data.type():
+                self.alpha = self.alpha.type_as(input.data)
+            at = self.alpha.gather(0, target.data.view(-1))
+            logpt = logpt * Variable(at)
+
+        loss = -1 * (1-pt)**self.gamma * logpt
+        if self.size_average:
+            return loss.mean()
+        else:
+            return loss.sum()
 
 def urpc_loss(cfg: Config, multi_scale_outputs, label_batch, dice_loss: DiceLoss, ce_loss: CrossEntropyLoss, kl_distance):
     outputs, outputs_aux1, outputs_aux2, outputs_aux3 = multi_scale_outputs
@@ -115,10 +151,10 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
     loss_seg_ce = 0
     output_d1_main = outputs_d1[0][:cfg.labeled_bs]
     loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+    loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
     output_d2_main = outputs_d2[0][:cfg.labeled_bs]
     loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+    loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
 
     #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
     #outputs_d1[0] torch.Size([24, 4, 256, 256])

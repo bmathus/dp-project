@@ -130,7 +130,7 @@ class Trainer:
                     loss_consist_aux = torch.tensor((0,)).to(self.device)
                     en_loss = torch.tensor((0,)).to(self.device)
 
-                loss = cfg.lamda * loss_seg_dice + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
+                loss = cfg.lamda * (loss_seg_dice + loss_seg_ce) + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -140,13 +140,14 @@ class Trainer:
                 #Logging
                 run["train/lr"].append(base_lr,step=iter_num)
                 run["train/loss"].append(loss,step=iter_num)
-                run["train/supervised_loss"].append(loss_seg_dice,step=iter_num)
+                run["train/dice_loss"].append(loss_seg_dice,step=iter_num)
+                run["train/ce_loss"].append(loss_seg_ce,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
                 # run["train/consistency_loss"].append(loss_consist,step=iter_num)
                 run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
                 run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
                 run["train/en_loss"].append(en_loss,step=iter_num)
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_seg_dice.item(),"loss_consist":loss_consist_main.item()})
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"dice_loss":loss_seg_dice.item(),"ce_loss":loss_seg_ce.item(),"loss_consist":loss_consist_main.item()})
 
                 # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
