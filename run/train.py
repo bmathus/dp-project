@@ -7,7 +7,7 @@ if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="loss-seg-config-1", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="loss-seg-config-2", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     p.add_argument('--consistency', type=float,default=0.1, help='consistency')
     p.add_argument('--consistency_rampup', type=float,default=200.0, help='consistency_rampup')
     p.add_argument('--temperature', type=float, default=0.1, help='temperature of sharpening')
-    p.add_argument('--lamda', type=float, default=1, help='weight to balance all losses')
+    p.add_argument('--lamda', type=float, default=0.5, help='weight to balance seg loss')
 
     args = p.parse_args()
 
