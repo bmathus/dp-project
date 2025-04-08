@@ -156,8 +156,6 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
     loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
     loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
 
-    loss_seg_ce = loss_seg_ce/2
-    loss_seg_dice = loss_seg_dice/2
     
     #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
     #outputs_d1[0] torch.Size([24, 4, 256, 256])

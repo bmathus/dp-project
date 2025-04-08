@@ -10,12 +10,13 @@ from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSample
 from project.utils import worker_init_fn,decide_device, get_current_consistency_weight
 from project.metrics import mse_loss, test_single_volume_ds, KDLoss
 import torch.nn.functional as F
+
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
 from project.models import unet_dbpnet, unet_mcnet,unet_urpc
-from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, mtnet_loss
+from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, FocalLoss
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -87,7 +88,7 @@ class Trainer:
         self.model.train()
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
-        ce_loss = CrossEntropyLoss()
+        ce_loss = FocalLoss(gamma=1.0, alpha=None, size_average=True)
         consistency_criterion = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 
