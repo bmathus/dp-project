@@ -88,7 +88,7 @@ class Trainer:
         self.model.train()
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
-        ce_loss = FocalLoss(gamma=1.5, alpha=None, size_average=True)
+        ce_loss = FocalLoss(gamma=2.5, alpha=None, size_average=True)
         consistency_criterion = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 
