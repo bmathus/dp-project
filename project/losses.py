@@ -149,7 +149,7 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
 
     loss_sup = supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss, cfg)
 
-    loss_sup_deep = deep_supervised_loss(outputs_d1, label_batch, ce_loss, dice_loss, cfg)
+    loss_sup_deep = deep_supervised_loss(outputs_d2, label_batch, ce_loss, dice_loss, cfg)
 
     #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
     #outputs_d1[0] torch.Size([24, 4, 256, 256])
