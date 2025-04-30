@@ -149,7 +149,7 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
 
     loss_sup = supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss, cfg)
 
-    loss_sup_deep = deep_supervised_loss(outputs_d1, label_batch, ce_loss, dice_loss, cfg)
+    loss_sup_deep = deep_supervised_loss(outputs_d2, label_batch, ce_loss, dice_loss, cfg)
 
     #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
     #outputs_d1[0] torch.Size([24, 4, 256, 256])
@@ -181,18 +181,18 @@ def supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss: Dice
 
     # Sup loss decoder 1
     output_d1_main = outputs_d1[0][:cfg.labeled_bs]
-    loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    # loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+    # loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
 
     # Sup loss decoder 2
     output_d2_main = outputs_d2[0][:cfg.labeled_bs]
-    # loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+    loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
 
     return loss_seg_dice + loss_seg_ce
 
 def deep_supervised_loss(outputs_d, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
-    weights = [0.7,0.4,0.1]
+    weights = [1,1,1]
 
     loss_sup_deep = 0
     for scale_num in range(0,3):
