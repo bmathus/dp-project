@@ -192,7 +192,7 @@ def supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss: Dice
     return loss_seg_dice + loss_seg_ce
 
 def deep_supervised_loss(outputs_d, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
-    weights = [1,1,1]
+    weights = [0.7,0.4,0.1]
 
     loss_sup_deep = 0
     for scale_num in range(0,3):
