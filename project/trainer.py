@@ -15,7 +15,7 @@ from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
 from project.models import unet_dbpnet, unet_mcnet,unet_urpc
-from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, mtnet_loss
+from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, mtnet_loss, FocalLoss
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -87,7 +87,7 @@ class Trainer:
         self.model.train()
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
-        ce_loss = CrossEntropyLoss()
+        ce_loss = FocalLoss(gamma=2.5,alpha=None, size_average=True)
         consistency_criterion = KDLoss(T=10)
         dice_loss = DiceLoss(cfg.num_classes)
 

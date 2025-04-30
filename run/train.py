@@ -7,7 +7,7 @@ if __name__ == "__main__":
     p = ArgumentParser()
 
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="deep-dice-and-ce-d2-w[0.7,0.4,0.1]", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="deep-dice-and-focal-d1-w[1,1,1]", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
