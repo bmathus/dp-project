@@ -2,7 +2,7 @@ from pathlib import Path
 from dataclasses import asdict
 from project.trainer import Trainer
 from project.logging import Logger
-from run.config import Config
+from config.run_config import Config
 from argparse import Namespace
 from run.test import Inference
 import yaml
@@ -37,11 +37,11 @@ class Experiment:
     def start_experiment(self):
         # Initialize run
         self.run = neptune.init_run(
-            project="dp-workspace/dp-segmentation",
+            project=self.cfg.project,
             name=self.cfg.name,
             custom_run_id=self.cfg.ver,
             tags=["debug"],
-            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MGM2ZjZlNS0wOGVlLTRiN2UtYjYzNC1mNDJiZmU4MzlhYzIifQ==",
+            api_token=self.cfg.api_token,
         )
         self.run["parameters"] = asdict(self.cfg)
 

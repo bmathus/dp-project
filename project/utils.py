@@ -1,7 +1,7 @@
 import random
 import torch
 import numpy as np
-from run.config import Config
+from config.run_config import Config
 
 def worker_init_fn(worker_id):
     random.seed(1337 + worker_id)
@@ -13,7 +13,6 @@ def decide_device():
         return "mps"
     return "cpu"
 
-# Utils ktore su pre istotu v rovnakom subore kvoli np.random
 def get_current_consistency_weight(cfg: Config,epoch):
     # Consistency ramp-up from https://arxiv.org/abs/1610.02242
     return cfg.consistency * sigmoid_rampup(epoch, cfg.consistency_rampup)

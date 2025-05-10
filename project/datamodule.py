@@ -8,8 +8,6 @@ from scipy.ndimage.interpolation import zoom
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import Sampler
 
-
-# from dataloaders.dataset import BaseDataSets, RandomGenerator, TwoStreamBatchSampler
 class BaseDataSets(Dataset):
     def __init__(self,base_dir: str,split="train",num=None,transform=None):
         self._base_dir = base_dir

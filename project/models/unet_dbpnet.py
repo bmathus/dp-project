@@ -4,7 +4,6 @@ from project.models.unet_urpc import FeatureDropout,FeatureNoise,Dropout
 from project.models.unet_mcnet import Encoder
 from project.models.unet_mcnet import UpBlock
 
-
 class DecoderMS(nn.Module):
     def __init__(self, params):
         super(DecoderMS, self).__init__()

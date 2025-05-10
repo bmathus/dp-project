@@ -1,4 +1,3 @@
-# import argparse
 from medpy import metric
 from scipy.ndimage import zoom
 from project.trainer import decide_device
@@ -9,13 +8,6 @@ import h5py
 import numpy as np
 import torch
 from tqdm import tqdm
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
-# parser.add_argument("--run_path", "-r", type=str, default="", help="Path to run dir")
-# parser.add_argument('--num_classes', type=int,  default=4,help='Output channel of network')
-# parser.add_argument('--labeled_num', type=int, default=7, help='Num of labeled data')
-# parser.add_argument("--network", "-nt", type=str, default="mtnet", help="Network to train")
 
 def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1
@@ -84,12 +76,6 @@ def Inference(FLAGS):
 
     image_list = sorted([item.replace('\n', '').split(".")[0]for item in image_list])
 
-    # snapshot_path = "../model/{}_{}_labeled/{}".format(FLAGS.exp, FLAGS.labeled_num, FLAGS.model)
-    # test_save_path = "../model/{}_{}_labeled/{}_predictions/".format(FLAGS.exp, FLAGS.labeled_num, FLAGS.model)
-    # if os.path.exists(test_save_path):
-    #     shutil.rmtree(test_save_path)
-    # os.makedirs(test_save_path)
-
     #Setup device and model
     device = torch.device(decide_device())
     if FLAGS.network == "urpc":
@@ -121,9 +107,3 @@ def Inference(FLAGS):
         third_total += np.asarray(third_metric)
     avg_metric = [first_total / len(image_list), second_total / len(image_list), third_total / len(image_list)]
     return avg_metric
-
-# if __name__ == '__main__':
-#     FLAGS = parser.parse_args()
-#     metric = Inference(FLAGS)
-#     print("Metrics avg per class:",metric)
-#     print("Metrics avg total:",(metric[0]+metric[1]+metric[2])/3)

@@ -1,13 +1,14 @@
 from argparse import ArgumentParser
-from project.experiment import Experiment  # noqa: E402
-from run.config import Config 
-
+from project.experiment import Experiment
+from config.run_config import Config 
 
 if __name__ == "__main__":
     p = ArgumentParser()
 
+    api_token = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MGM2ZjZlNS0wOGVlLTRiN2UtYjYzNC1mNDJiZmU4MzlhYzIifQ=="
+
     # Experiment
-    p.add_argument("--name", "-n", type=str, default="d2-deep-dice-d1-focal-w[0.7,0.4,0.1]", help="Experiment name")
+    p.add_argument("--name", "-n", type=str, default="debug", help="Experiment name")
     p.add_argument("--ver", "-v", type=str, default="", help="Experiment version (neptune custom id) for resuming run, leave empty for new run")
     p.add_argument("--data_path", "-d", type=str, default="./data/ACDC", help="Path to dataset")
     p.add_argument("--base-path", "-bp", type=str, default="./data", help="Experiment path")
@@ -15,10 +16,8 @@ if __name__ == "__main__":
                    choices=["urpc", "mcnet", "dbpnet"],
                    help="Network to train: urpc, mcnet, dbpnet")
 
-    # p.add_argument("--checkpoint_freq","-cf", type=int, default=2, help="Frequency of saving model & opt checkpoints")
     p.add_argument('--seed', type=int,  default=1337, help='Random seed')
     p.add_argument('--deterministic',"-dt", type=int,  default=1,help='Whether use deterministic training')
-
     p.add_argument("--max_iter","-e", type=int, default=50000, help="Number of iterations")
     p.add_argument("--base_lr","-lr", type=float, default=0.01, help="Segmentation network learning rate")
     p.add_argument('--num_classes', type=int, default=4, help='Output channel of network')
@@ -29,12 +28,18 @@ if __name__ == "__main__":
     p.add_argument('--labeled_num', type=int, default=7, help='Labeled data')
     p.add_argument('--patch_size', type=int,  default=256,help='patch size of network input')
 
+    # Loss params
     p.add_argument('--consistency', type=float,default=0.1, help='consistency')
     p.add_argument('--consistency_rampup', type=float,default=200.0, help='consistency_rampup')
     p.add_argument('--temperature', type=float, default=10, help='temperature (0.1 for sharpening, 10 for t-softmax)')
     p.add_argument('--lamda', type=float, default=1, help='weight to balance sup loss')
     p.add_argument('--gamma', type=float, default=2.5, help='gamma for focal loss')
 
+    #neptune
+    p.add_argument
+    p.add_argument("--api_token", type=str, default=api_token, help="Neptune api token")
+    p.add_argument("--project", type=str, default="dp-workspace/dp-segmentation", help="Neptune project name")
+    
 
     args = p.parse_args()
 

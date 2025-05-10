@@ -6,3 +6,4 @@ torchvision
 MedPy
 tqdm
 neptune
+ipykernel

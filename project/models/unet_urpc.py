@@ -6,7 +6,6 @@ from torch.distributions.uniform import Uniform
 """
 A modified implementation from: https://github.com/HiLab-git/SSL4MIS/
 """
-
 class ConvBlock(nn.Module):
     """two convolution layers with batch norm and leaky relu"""
 
@@ -27,7 +26,6 @@ class ConvBlock(nn.Module):
     
 
 # Encoder modules
-
 class DownBlock(nn.Module):
     """Downsampling followed by ConvBlock"""
 

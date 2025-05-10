@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from run.config import Config
+from config.run_config import Config
 from torch.nn.modules.loss import CrossEntropyLoss
 from project.utils import sharpening
 from torch.autograd import Variable
@@ -167,7 +167,7 @@ def urpc_loss(cfg: Config, multi_scale_outputs, label_batch, dice_loss: DiceLoss
 
 
 # CPCR loss based on KL and t-softmax
-def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_criterion, cfg: Config, device: torch.device):
+def CPCR_loss_kd_deep(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_criterion, cfg: Config, device: torch.device):
     outputs_d1,outputs_d2 = outputs
 
     loss_sup = supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss, cfg)
@@ -191,6 +191,37 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
     loss_consist_aux = loss_consist_aux/3
 
     return loss_sup,loss_sup_deep, loss_consist_main, loss_consist_aux, en_loss
+
+
+def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_criterion, cfg: Config, device: torch.device):
+    outputs_d1,outputs_d2 = outputs
+    # Sup
+    loss_seg_dice = 0
+    loss_seg_ce = 0
+    output_d1_main = outputs_d1[0][:cfg.labeled_bs]
+    loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+    output_d2_main = outputs_d2[0][:cfg.labeled_bs]
+    loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+
+    #Uncertainty min
+    outputs_avg_main_soft = (F.softmax(outputs_d1[0], dim=1) + F.softmax(outputs_d2[0], dim=1)) / 2
+    en_loss = entropy_loss(outputs_avg_main_soft,device,C=4)
+    
+    #Unsup
+    loss_consist_main = 0
+    loss_consist_main += consistency_criterion(outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+    loss_consist_main += consistency_criterion(outputs_d2[0].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[0].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+
+    loss_consist_aux = 0
+    for scale_num in range(1,4):
+        loss_consist_aux += consistency_criterion(outputs_d1[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d2[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+        loss_consist_aux += consistency_criterion(outputs_d2[scale_num].permute(0, 2, 3, 1).reshape(-1, 4),outputs_d1[scale_num].detach().permute(0, 2, 3, 1).reshape(-1, 4))
+
+    loss_consist_aux = loss_consist_aux/3
+
+    return loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux, en_loss
 
 
 # CPCR loss based on MSE and sharpening

@@ -5,7 +5,7 @@ import numpy as np
 import random
 from tqdm import tqdm
 from project.logging import Logger
-from run.config import Config
+from config.run_config import Config
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device, get_current_consistency_weight
 from project.metrics import test_single_volume_ds
@@ -15,7 +15,7 @@ from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
 from project.models import unet_dbpnet, unet_mcnet,unet_urpc
-from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, CPCR_loss_mse, mtnet_loss, FocalLoss, KDLoss, mse_loss
+from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, CPCR_loss_kd_deep, CPCR_loss_mse, mtnet_loss, FocalLoss, KDLoss, mse_loss
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -114,12 +114,22 @@ class Trainer:
 
                 outputs = self.model(volume_batch)
                 
-                loss_sup,loss_sup_deep,loss_consist_main, loss_consist_aux, en_loss = CPCR_loss_kd(
+                # loss_sup,loss_sup_deep,loss_consist_main, loss_consist_aux, en_loss = CPCR_loss_kd_deep(
+                #     outputs=outputs,
+                #     label_batch=label_batch,
+                #     ce_loss=ce_loss,
+                #     dice_loss=dice_loss,
+                #     consistency_criterion= consistency_criterion,
+                #     cfg=cfg,
+                #     device=self.device
+                # )
+
+                loss_seg_dice,loss_seg_ce,loss_consist_main, loss_consist_aux, en_loss = CPCR_loss_kd(
                     outputs=outputs,
                     label_batch=label_batch,
                     ce_loss=ce_loss,
                     dice_loss=dice_loss,
-                    consistency_criterion= consistency_criterion,
+                    consistency_criterion=consistency_criterion,
                     cfg=cfg,
                     device=self.device
                 )
@@ -148,7 +158,7 @@ class Trainer:
                     loss_consist_aux = torch.tensor((0,)).to(self.device)
                     en_loss = torch.tensor((0,)).to(self.device)
 
-                loss = cfg.lamda * (loss_sup + loss_sup_deep) + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
+                loss = cfg.lamda * (loss_seg_dice + loss_seg_ce) + (0.1 * loss_consist_main) + (0.1 * en_loss) + (consistency_weight * loss_consist_aux)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -158,16 +168,16 @@ class Trainer:
                 #Logging
                 run["train/lr"].append(base_lr,step=iter_num)
                 run["train/loss"].append(loss,step=iter_num)
-                run["train/supervised_loss"].append(loss_sup,step=iter_num)
-                run["train/supervised_loss_deep"].append(loss_sup_deep,step=iter_num)
-                # run["train/dice_loss"].append(loss_seg_dice,step=iter_num)
-                # run["train/ce_loss"].append(loss_seg_ce,step=iter_num)
+                # run["train/supervised_loss"].append(loss_sup,step=iter_num)
+                # run["train/supervised_loss_deep"].append(loss_sup_deep,step=iter_num)
+                run["train/dice_loss"].append(loss_seg_dice,step=iter_num)
+                run["train/ce_loss"].append(loss_seg_ce,step=iter_num)
                 run["train/consistency_weight"].append(consistency_weight,step=iter_num)    
                 # run["train/consistency_loss"].append(loss_consist,step=iter_num)
                 run["train/consistency_loss_main"].append(loss_consist_main,step=iter_num)
                 run["train/consistency_loss_aux"].append(loss_consist_aux,step=iter_num)
                 run["train/en_loss"].append(en_loss,step=iter_num)
-                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"loss_sup":loss_sup.item(),"loss_consist":loss_consist_main.item()})
+                iterator.set_postfix({"iter_num":iter_num,"loss":loss.item(),"dice_loss":loss_seg_dice.item(),"ce_loss":loss_seg_ce.item(),"loss_consist":loss_consist_main.item()})
 
                 # Validation
                 if iter_num > 0 and iter_num % 200 == 0:
