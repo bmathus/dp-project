@@ -15,6 +15,28 @@ def entropy_loss(p,device, C=4):
 
     return ent
 
+class KDLoss(nn.Module):
+    """
+    Distilling the Knowledge in a Neural Network
+    https://arxiv.org/pdf/1503.02531.pdf
+    """
+
+    def __init__(self, T):
+        super(KDLoss, self).__init__()
+        self.T = T
+
+    def forward(self, out_s, out_t):
+        loss = (
+            F.kl_div(F.log_softmax(out_s / self.T, dim=1),F.softmax(out_t / self.T, dim=1), reduction="batchmean") # , reduction="batchmean"
+            * self.T
+            * self.T
+        )
+        return loss
+
+
+def mse_loss(input1, input2):
+    return torch.mean((input1 - input2)**2)
+
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
         super(DiceLoss, self).__init__()
@@ -99,7 +121,7 @@ def urpc_loss(cfg: Config, multi_scale_outputs, label_batch, dice_loss: DiceLoss
     outputs_aux3_soft = torch.softmax(outputs_aux3, dim=1)
 
     #SUP CE loss (outputs <-> labels)
-    loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) # podla chatu možem dať preč [:] lebo .long() ajtak robi kopiu
+    loss_ce = ce_loss(outputs[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long()) 
     loss_ce_aux1 = ce_loss(outputs_aux1[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
     loss_ce_aux2 = ce_loss(outputs_aux2[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
     loss_ce_aux3 = ce_loss(outputs_aux3[:cfg.labeled_bs],label_batch[:cfg.labeled_bs][:].long())
@@ -113,7 +135,7 @@ def urpc_loss(cfg: Config, multi_scale_outputs, label_batch, dice_loss: DiceLoss
     #SUP loss
     supervised_loss = (loss_ce+loss_ce_aux1+loss_ce_aux2+loss_ce_aux3 +loss_dice+loss_dice_aux1+loss_dice_aux2+loss_dice_aux3)/8
 
-    preds = (outputs_soft+outputs_aux1_soft +outputs_aux2_soft+outputs_aux3_soft)/4 #priemer pravdep predickie všetkých škal (labeled aj unlabeled)
+    preds = (outputs_soft+outputs_aux1_soft +outputs_aux2_soft+outputs_aux3_soft)/4 
     
     #weight = exp(KL (outputs_soft <-> preds_soft_avg))
     variance_main = torch.sum(kl_distance(torch.log(outputs_soft[cfg.labeled_bs:]), preds[cfg.labeled_bs:]), dim=1, keepdim=True)
@@ -144,17 +166,13 @@ def urpc_loss(cfg: Config, multi_scale_outputs, label_batch, dice_loss: DiceLoss
     return supervised_loss,loss_dice,loss_ce,consistency_loss,#uncertainty_min
 
 
+# CPCR loss based on KL and t-softmax
 def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_criterion, cfg: Config, device: torch.device):
     outputs_d1,outputs_d2 = outputs
 
     loss_sup = supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss, cfg)
 
     loss_sup_deep = deep_supervised_loss(outputs_d2, label_batch, ce_loss, dice_loss, cfg)
-
-    #print("outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)",outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2).shape)
-    #outputs_d1[0] torch.Size([24, 4, 256, 256])
-    #outputs_d1[0].permute(0, 2, 3, 1) torch.Size([24, 256, 256, 4])
-    #outputs_d1[0].permute(0, 2, 3, 1).reshape(-1, 2)
 
     #Uncertainty min
     outputs_avg_main_soft = (F.softmax(outputs_d1[0], dim=1) + F.softmax(outputs_d2[0], dim=1)) / 2
@@ -175,77 +193,8 @@ def CPCR_loss_kd(outputs, label_batch,ce_loss,dice_loss: DiceLoss, consistency_c
     return loss_sup,loss_sup_deep, loss_consist_main, loss_consist_aux, en_loss
 
 
-def supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
-    loss_seg_dice = 0
-    loss_seg_ce = 0
-
-    # Sup loss decoder 1
-    output_d1_main = outputs_d1[0][:cfg.labeled_bs]
-    # loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
-
-    # Sup loss decoder 2
-    output_d2_main = outputs_d2[0][:cfg.labeled_bs]
-    loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-    # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
-
-    return loss_seg_dice + loss_seg_ce
-
-def deep_supervised_loss(outputs_d, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
-    weights = [0.7,0.4,0.1]
-
-    loss_sup_deep = 0
-    for scale_num in range(0,3):
-        output_scale = outputs_d[scale_num + 1][:cfg.labeled_bs]
-        loss_seg_dice = dice_loss(F.softmax(output_scale, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
-        # loss_seg_ce = ce_loss(output_scale,label_batch[:cfg.labeled_bs][:].long())
-        loss_sup_deep += loss_seg_dice * weights[scale_num]
-    
-    return loss_sup_deep
-
-
-def mtnet_loss(outputs, label_batch, ce_loss: CrossEntropyLoss, dice_loss: DiceLoss, consistency_criterion, cfg: Config):
-    # Dec 1 output: torch.Size([24, 4, 256, 256])
-    # Dec 2 output: torch.Size([24, 4, 256, 256])
-    # Label: torch.Size([24, 256, 256])
-
-    # num_outputs = len(outputs)
-    # y_ori = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-    # y_pseudo_label = torch.zeros((num_outputs,) + outputs[0].shape) # torch.Size([2, 24, 4, 256, 256])
-
-    loss_seg = 0
-    loss_seg_dice = 0 
-
-    y_d1 = outputs[0][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
-    y_prob = F.softmax(y_d1, dim=1)
-    # loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
-    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-    y_d2 = outputs[1][:cfg.labeled_bs,...] # torch.Size([12, 4, 256, 256]) to iste ako outputs[idx][:cfg.labeled_bs]
-    y_prob = F.softmax(y_d2, dim=1)
-    # loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
-    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
-
-
-    y_prob_all_d1 = F.softmax(outputs[0], dim=1)
-    y_pseudo_label_d1 = sharpening(y_prob_all_d1,cfg)
-
-    y_prob_all_d2 = F.softmax(outputs[1], dim=1)
-    y_pseudo_label_d2 = sharpening(y_prob_all_d2,cfg)
-    
-    loss_consist = 0
-    loss_consist += consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1)
-
-    # for i in range(num_outputs):
-    #     for j in range(num_outputs):
-    #         if i != j:
-    #             #print(f"i: {i} j: {j}")
-    #             loss_consist += consistency_criterion(y_ori[i], y_pseudo_label[j])
-    
-    return loss_seg_dice,loss_seg,loss_consist
-
-
-def msd_loss(outputs, label_batch, ce_loss: CrossEntropyLoss, dice_loss: DiceLoss, consistency_criterion, cfg: Config):
+# CPCR loss based on MSE and sharpening
+def CPCR_loss_mse(outputs, label_batch, ce_loss: CrossEntropyLoss, dice_loss: DiceLoss, consistency_criterion, cfg: Config):
     outputs_d1,outputs_d2 = outputs
 
     # Sup
@@ -278,3 +227,59 @@ def msd_loss(outputs, label_batch, ce_loss: CrossEntropyLoss, dice_loss: DiceLos
     loss_consist_aux = loss_consist_aux/3
         
     return loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux
+
+
+def supervised_loss(outputs_d1,outputs_d2, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
+    loss_seg_dice = 0
+    loss_seg_ce = 0
+
+    # Sup loss decoder 1
+    output_d1_main = outputs_d1[0][:cfg.labeled_bs]
+    # loss_seg_dice += dice_loss(F.softmax(output_d1_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    loss_seg_ce += ce_loss(output_d1_main,label_batch[:cfg.labeled_bs][:].long())
+
+    # Sup loss decoder 2
+    output_d2_main = outputs_d2[0][:cfg.labeled_bs]
+    loss_seg_dice += dice_loss(F.softmax(output_d2_main, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+    # loss_seg_ce += ce_loss(output_d2_main,label_batch[:cfg.labeled_bs][:].long())
+
+    return loss_seg_dice + loss_seg_ce
+
+def deep_supervised_loss(outputs_d, label_batch, ce_loss, dice_loss: DiceLoss, cfg: Config):
+    weights = [0.7,0.4,0.1]
+
+    loss_sup_deep = 0
+    for scale_num in range(0,3):
+        output_scale = outputs_d[scale_num + 1][:cfg.labeled_bs]
+        loss_seg_dice = dice_loss(F.softmax(output_scale, dim=1),label_batch[:cfg.labeled_bs].unsqueeze(1))
+        # loss_seg_ce = ce_loss(output_scale,label_batch[:cfg.labeled_bs][:].long())
+        loss_sup_deep += loss_seg_dice * weights[scale_num]
+    
+    return loss_sup_deep
+
+
+def mtnet_loss(outputs, label_batch, ce_loss: CrossEntropyLoss, dice_loss: DiceLoss, consistency_criterion, cfg: Config):
+    loss_seg = 0
+    loss_seg_dice = 0 
+
+    y_d1 = outputs[0][:cfg.labeled_bs,...] 
+    y_prob = F.softmax(y_d1, dim=1)
+    # loss_seg += ce_loss(y_d1, label_batch[:cfg.labeled_bs][:].long())
+    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+    y_d2 = outputs[1][:cfg.labeled_bs,...] 
+    y_prob = F.softmax(y_d2, dim=1)
+    # loss_seg += ce_loss(y_d2, label_batch[:cfg.labeled_bs][:].long())
+    loss_seg_dice += dice_loss(y_prob, label_batch[:cfg.labeled_bs].unsqueeze(1))
+
+
+    y_prob_all_d1 = F.softmax(outputs[0], dim=1)
+    y_pseudo_label_d1 = sharpening(y_prob_all_d1,cfg)
+
+    y_prob_all_d2 = F.softmax(outputs[1], dim=1)
+    y_pseudo_label_d2 = sharpening(y_prob_all_d2,cfg)
+    
+    loss_consist = 0
+    loss_consist += consistency_criterion(y_prob_all_d1, y_pseudo_label_d2) + consistency_criterion(y_prob_all_d2, y_pseudo_label_d1)
+    
+    return loss_seg_dice,loss_seg,loss_consist

@@ -25,3 +25,4 @@ class Config:
     consistency_rampup: float
     temperature: float
     lamda: float
+    gamma: float

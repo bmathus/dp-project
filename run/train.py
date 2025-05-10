@@ -31,8 +31,10 @@ if __name__ == "__main__":
 
     p.add_argument('--consistency', type=float,default=0.1, help='consistency')
     p.add_argument('--consistency_rampup', type=float,default=200.0, help='consistency_rampup')
-    p.add_argument('--temperature', type=float, default=0.1, help='temperature of sharpening')
-    p.add_argument('--lamda', type=float, default=1, help='weight to balance all losses')
+    p.add_argument('--temperature', type=float, default=10, help='temperature (0.1 for sharpening, 10 for t-softmax)')
+    p.add_argument('--lamda', type=float, default=1, help='weight to balance sup loss')
+    p.add_argument('--gamma', type=float, default=2.5, help='gamma for focal loss')
+
 
     args = p.parse_args()
 

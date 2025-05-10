@@ -8,14 +8,14 @@ from project.logging import Logger
 from run.config import Config
 from project.datamodule import BaseDataSets,RandomGenerator,TwoStreamBatchSampler, patients_to_slices
 from project.utils import worker_init_fn,decide_device, get_current_consistency_weight
-from project.metrics import mse_loss, test_single_volume_ds, KDLoss
+from project.metrics import test_single_volume_ds
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 from pathlib import Path
 from project.models import unet_dbpnet, unet_mcnet,unet_urpc
-from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, mtnet_loss, FocalLoss
+from project.losses import urpc_loss, DiceLoss, CPCR_loss_kd, CPCR_loss_mse, mtnet_loss, FocalLoss, KDLoss, mse_loss
 import torch.backends.cudnn as cudnn
 from torch.nn.modules.loss import CrossEntropyLoss
 from neptune import Run
@@ -38,7 +38,7 @@ class Trainer:
         torch.mps.manual_seed(cfg.seed)
         # os.environ['CUDA_VISIBLE_DEVICES'] = 0
 
-        self.device = torch.device(decide_device()) # toto urpc nerobí
+        self.device = torch.device(decide_device())
         print("| Setting up device:",self.device)
 
         # Create model
@@ -54,7 +54,16 @@ class Trainer:
             self.model: nn.Module = unet_mcnet.MCNet2d_v1(in_chns=1,class_num=self.cfg.num_classes)
         elif self.cfg.network == "dbpnet":
             self.model: nn.Module = unet_dbpnet.DBPNet(in_chns=1,class_num=self.cfg.num_classes)
-        self.model = self.model.to(self.device)  # ani toto nerobí URPC dáva model.cuda()
+        self.model = self.model.to(self.device)  
+    
+    def setup_consistency_criterion(self):
+        if self.cfg.network == "urpc":
+            raise NotImplementedError("Consistency criterion is not used by URPC")
+        elif self.cfg.network == "mcnet":
+            consistency_criterion = mse_loss
+        elif self.cfg.network == "dbpnet":
+            consistency_criterion = KDLoss(T=self.cfg.temperature)
+        return consistency_criterion
 
     def setup_dataloaders(self,cfg: Config):
         print("| Setting up dataloaders:")
@@ -87,8 +96,8 @@ class Trainer:
         self.model.train()
 
         optimizer = torch.optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
-        ce_loss = FocalLoss(gamma=2.5,alpha=None, size_average=True)
-        consistency_criterion = KDLoss(T=10)
+        ce_loss = FocalLoss(gamma=cfg.gamma,alpha=None, size_average=True)
+        consistency_criterion = self.setup_consistency_criterion()
         dice_loss = DiceLoss(cfg.num_classes)
 
         self.log.on_training_start()
@@ -98,6 +107,7 @@ class Trainer:
         iterator = tqdm(range(max_epoch), desc="| Training:")
         for epoch in iterator:
             for _, sampled_batch in enumerate(trainloader):
+
                 # Data to device
                 volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
                 volume_batch, label_batch = volume_batch.to(self.device), label_batch.to(self.device)
@@ -113,6 +123,14 @@ class Trainer:
                     cfg=cfg,
                     device=self.device
                 )
+
+                # loss_seg_dice,loss_seg_ce,loss_consist_main,loss_consist_aux = CPCR_loss_mse(
+                #     outputs=outputs,
+                #     ce_loss=ce_loss,
+                #     dice_loss=dice_loss,
+                #     consistency_criterion=consistency_criterion,
+                #     cfg=cfg
+                # )
 
                 # loss_seg_dice,loss_seg,loss_consist = mtnet_loss(
                 #     outputs=outputs,
@@ -192,7 +210,7 @@ class Trainer:
         self.model.train()
 
         optimizer = optim.SGD(self.model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
-        ce_loss = CrossEntropyLoss()
+        ce_loss = nn.CrossEntropyLoss()
         dice_loss = DiceLoss(cfg.num_classes)
         kl_distance = nn.KLDivLoss(reduction='none')
 
