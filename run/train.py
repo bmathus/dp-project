@@ -1,11 +1,13 @@
 from argparse import ArgumentParser
 from project.experiment import Experiment
 from config.run_config import Config 
+from dotenv import load_dotenv
+import os
 
 if __name__ == "__main__":
+    load_dotenv()
+    api_token = os.getenv("API_TOKEN")
     p = ArgumentParser()
-
-    api_token = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MGM2ZjZlNS0wOGVlLTRiN2UtYjYzNC1mNDJiZmU4MzlhYzIifQ=="
 
     # Experiment
     p.add_argument("--name", "-n", type=str, default="debug", help="Experiment name")

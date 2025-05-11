@@ -7,3 +7,4 @@ MedPy
 tqdm
 neptune
 ipykernel
+python-dotenv
